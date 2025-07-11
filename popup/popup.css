@@ -101,6 +101,31 @@ input:checked + .slider:before {
   background: white;
 }
 
+.timer-persistence-input {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.radio-option input[type="radio"] {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.radio-option span {
+  font-size: 14px;
+  color: #333;
+}
+
 .domain-input {
   display: flex;
   gap: 8px;

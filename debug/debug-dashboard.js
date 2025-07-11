@@ -129,16 +129,45 @@ class DebugDashboard {
     const timeRemaining = debugInfo ? debugInfo.timeRemaining : 0;
     const minutes = Math.floor(timeRemaining / 60000);
     const seconds = Math.floor((timeRemaining % 60000) / 1000);
-    const timerText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
     
+    let timerText;
     let timerClass = 'safe';
-    if (timeRemaining < 30000) timerClass = 'critical';
-    else if (timeRemaining < 60000) timerClass = 'warning';
+    let statusText = '';
+    
+    if (timeRemaining <= 0) {
+      timerText = 'CLOSING';
+      timerClass = 'closing';
+      statusText = '🔥 Tab will be closed soon';
+    } else {
+      timerText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+      if (timeRemaining < 10000) { // Less than 10 seconds
+        timerClass = 'critical';
+        statusText = '⚠️ Closing very soon';
+      } else if (timeRemaining < 30000) { // Less than 30 seconds
+        timerClass = 'critical';
+        statusText = '⚠️ Closing soon';
+      } else if (timeRemaining < 60000) { // Less than 1 minute
+        timerClass = 'warning';
+        statusText = '⏰ Will close in < 1 min';
+      }
+    }
+    
+    // Check if tab is active or excluded
+    if (debugInfo && debugInfo.isActive) {
+      timerText = 'ACTIVE';
+      timerClass = 'active';
+      statusText = '✅ Currently active';
+    } else if (debugInfo && debugInfo.isExcluded) {
+      timerText = 'EXCLUDED';
+      timerClass = 'excluded';
+      statusText = '🚫 Domain excluded';
+    }
     
     div.innerHTML = `
       <div class="tab-info">
         <div class="tab-title">${tab.title}</div>
         <div class="tab-url">${tab.url}</div>
+        ${statusText ? `<div class="tab-status">${statusText}</div>` : ''}
       </div>
       <div class="tab-timer ${timerClass}">${timerText}</div>
     `;

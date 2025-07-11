@@ -7,7 +7,14 @@ class DebugOverlay {
     this.lastActivity = Date.now();
     this.isActive = true;
     this.originalTitle = document.title;
+    this.isInvalidated = false;
     this.init();
+  }
+
+  debugLog(message, ...args) {
+    if (this.debugMode) {
+      console.log(`🔤 [DebugOverlay] ${message}`, ...args);
+    }
   }
 
   async init() {
@@ -31,15 +38,15 @@ class DebugOverlay {
       if (autoCloseSettings) {
         this.debugMode = autoCloseSettings.debugMode || false;
         this.timeoutMs = this.calculateTimeoutMs(autoCloseSettings);
-        console.log(`🐛 Debug overlay: Settings loaded - timeout: ${this.timeoutMs/1000}s, debug mode ${this.debugMode ? 'ENABLED' : 'DISABLED'}`);
-        console.log(`🐛 Debug overlay: Raw settings:`, autoCloseSettings);
+        this.debugLog(`Settings loaded - timeout: ${this.timeoutMs/1000}s, debug mode ${this.debugMode ? 'ENABLED' : 'DISABLED'}`);
+        this.debugLog(`Raw settings:`, autoCloseSettings);
       } else {
-        console.log('🐛 Debug overlay: No settings found, using defaults - timeout: 30 minutes, debug mode disabled');
+        this.debugLog('No settings found, using defaults - timeout: 30 minutes, debug mode disabled');
         // Use default settings if none found
         this.timeoutMs = 30 * 60 * 1000; // 30 minutes default
       }
     } catch (error) {
-      console.log('🐛 Debug overlay: Could not load settings', error);
+      this.debugLog('Could not load settings', error);
       this.timeoutMs = 30 * 60 * 1000; // 30 minutes default on error
     }
   }
@@ -63,7 +70,7 @@ class DebugOverlay {
         this.debugMode = newSettings.debugMode || false;
         this.timeoutMs = this.calculateTimeoutMs(newSettings);
         
-        console.log(`🐛 Debug overlay: Settings changed, debug mode ${this.debugMode ? 'ENABLED' : 'DISABLED'}`);
+        this.debugLog(`Settings changed, debug mode ${this.debugMode ? 'ENABLED' : 'DISABLED'}`);
         
         if (this.debugMode && !wasDebugMode) {
           this.createOverlay();
@@ -143,8 +150,13 @@ class DebugOverlay {
       this.lastActivity = Date.now();
       console.log(`⏰ Debug overlay: Window focused - resetting local timer to full timeout (${this.timeoutMs/1000}s)`);
       // Also notify background script about the activity
-      chrome.runtime.sendMessage({ type: 'resetTimer' }).catch(() => {
-        // Ignore errors - background script might not be ready
+      chrome.runtime.sendMessage({ type: 'resetTimer' }).catch((error) => {
+        if (error.message.includes('Extension context invalidated')) {
+          console.log('🔄 Extension context invalidated - stopping debug overlay');
+          this.handleExtensionInvalidation();
+        } else {
+          console.log('Background script not ready, ignoring error:', error.message);
+        }
       });
       this.updateOverlay();
     });
@@ -392,13 +404,61 @@ class DebugOverlay {
     }
   }
 
+  handleExtensionInvalidation() {
+    console.log('🛑 Extension context invalidated - cleaning up debug overlay');
+    
+    // Stop all intervals and timers
+    this.stopUpdateLoop();
+    this.stopTitleUpdateLoop();
+    
+    // Remove the overlay
+    if (this.overlay) {
+      this.overlay.remove();
+      this.overlay = null;
+    }
+    
+    // Reset title to original
+    if (this.originalTitle) {
+      document.title = this.originalTitle;
+    }
+    
+    // Mark as invalidated to prevent further operations
+    this.isInvalidated = true;
+  }
+
   async updateOverlay() {
+    // Check if extension context is invalidated
+    if (this.isInvalidated) {
+      return;
+    }
+    
     // Get real-time debug info from background script
     let debugInfo = null;
     try {
       debugInfo = await chrome.runtime.sendMessage({ type: 'getDebugInfo' });
+      this.debugLog('Successfully received debug info from background');
     } catch (error) {
-      console.log('Debug overlay: Failed to get debug info from background');
+      if (error.message.includes('Extension context invalidated')) {
+        console.log('🔄 Extension context invalidated - stopping debug overlay');
+        this.handleExtensionInvalidation();
+        return;
+      }
+      
+      this.debugLog(`Failed to get debug info from background: ${error.message}`);
+      console.error('Debug overlay communication error:', error);
+      
+      // Try to test basic communication
+      try {
+        const testResponse = await chrome.runtime.sendMessage({ type: 'test' });
+        this.debugLog('Basic message test response:', testResponse);
+      } catch (testError) {
+        if (testError.message.includes('Extension context invalidated')) {
+          console.log('🔄 Extension context invalidated during test - stopping debug overlay');
+          this.handleExtensionInvalidation();
+          return;
+        }
+        this.debugLog(`Basic communication test failed: ${testError.message}`);
+      }
     }
 
     // Update tab title with countdown (always, regardless of overlay visibility)
@@ -410,8 +470,11 @@ class DebugOverlay {
       const statusElement = document.getElementById('debug-status');
       
       if (timerElement && debugInfo) {
+        // Determine if tab is active - prioritize background script info
+        const isActive = debugInfo ? debugInfo.isActive : this.isActive;
+        
         // Only show countdown if tab is INACTIVE
-        if (debugInfo.isActive || this.isActive) {
+        if (isActive) {
           // Tab is active - show "ACTIVE" instead of countdown
           timerElement.textContent = 'ACTIVE';
           timerElement.className = 'timer-value active';
@@ -456,10 +519,13 @@ class DebugOverlay {
       }
       
       if (statusElement) {
+        // Use the same active state determination
+        const isActive = debugInfo ? debugInfo.isActive : this.isActive;
+        
         if (debugInfo && debugInfo.isExcluded) {
           statusElement.textContent = 'Excluded';
           statusElement.className = 'status-value excluded';
-        } else if (!this.isActive) {
+        } else if (!isActive) {
           statusElement.textContent = 'Inactive';
           statusElement.className = 'status-value inactive';
         } else {
@@ -485,8 +551,14 @@ class DebugOverlay {
       return;
     }
 
+    // Determine if tab is active - prioritize background script info
+    const isActive = debugInfo ? debugInfo.isActive : this.isActive;
+    
+    // Debug logging for title updates
+    this.debugLog(`Title update - isActive: ${isActive}, debugInfo active: ${debugInfo ? debugInfo.isActive : 'none'}, local active: ${this.isActive}`);
+    
     // Only show countdown if tab is INACTIVE
-    if (debugInfo && (debugInfo.isActive || this.isActive)) {
+    if (isActive) {
       // Tab is active - show original title
       document.title = this.originalTitle;
     } else {
@@ -497,14 +569,9 @@ class DebugOverlay {
         timeRemaining = debugInfo.timeRemaining;
       } else {
         // Fallback to local calculation - but only if tab is INACTIVE
-        if (!this.isActive) {
-          const now = Date.now();
-          const timeSinceActivity = now - this.lastActivity;
-          timeRemaining = Math.max(0, this.timeoutMs - timeSinceActivity);
-        } else {
-          // Tab is active according to local state - show full timeout
-          timeRemaining = this.timeoutMs;
-        }
+        const now = Date.now();
+        const timeSinceActivity = now - this.lastActivity;
+        timeRemaining = Math.max(0, this.timeoutMs - timeSinceActivity);
       }
       
       if (timeRemaining > 0) {
