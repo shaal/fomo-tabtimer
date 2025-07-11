@@ -31,6 +31,20 @@
     </div>
 
     <div class="section">
+      <h3>After Browser Restart</h3>
+      <div class="timer-persistence-input">
+        <label class="radio-option">
+          <input type="radio" name="timerPersistence" value="absolute" id="timerAbsolute">
+          <span>Close expired tabs</span>
+        </label>
+        <label class="radio-option">
+          <input type="radio" name="timerPersistence" value="continue" id="timerContinue">
+          <span>Give fresh timers</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="section">
       <h3>Excluded Domains</h3>
       <div class="domain-input">
         <input type="text" id="domainInput" placeholder="e.g., google.com or *.github.com">

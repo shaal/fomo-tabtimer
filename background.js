@@ -13,7 +13,8 @@ class AutoCloseManager {
       timeUnit: 'minutes',
       excludedDomains: [],
       excludePinned: true,
-      debugMode: false
+      debugMode: false,
+      timerPersistenceMode: 'absolute' // 'absolute' or 'continue'
     };
     this.init();
   }
@@ -21,6 +22,7 @@ class AutoCloseManager {
   async init() {
     this.startTime = Date.now();
     await this.loadSettings();
+    await this.loadTabActivity();
     this.setupEventListeners();
     this.startPeriodicCheck();
     
@@ -48,6 +50,72 @@ class AutoCloseManager {
     console.log(`🛡️ Excluded domains: ${this.settings.excludedDomains.length > 0 ? this.settings.excludedDomains.join(', ') : 'none'}`);
   }
 
+  async loadTabActivity() {
+    console.log('⏰ Loading tab activity from storage...');
+    const stored = await chrome.storage.local.get(['tabActivity']);
+    
+    if (stored.tabActivity) {
+      // Convert stored object back to Map
+      this.tabActivity = new Map(Object.entries(stored.tabActivity));
+      console.log(`✅ Loaded activity for ${this.tabActivity.size} tabs from storage`);
+      
+      // Check for tabs that should have been closed during downtime
+      await this.checkForExpiredTabs();
+    } else {
+      console.log('⚠️ No stored tab activity found');
+    }
+  }
+
+  async checkForExpiredTabs() {
+    console.log(`🔍 Checking for tabs that expired during downtime (mode: ${this.settings.timerPersistenceMode})...`);
+    
+    const tabs = await chrome.tabs.query({});
+    const now = Date.now();
+    const timeoutMs = this.getTimeoutInMs();
+    
+    let expiredCount = 0;
+    let continuedCount = 0;
+    
+    for (const tab of tabs) {
+      const lastActivity = this.tabActivity.get(tab.id);
+      
+      if (lastActivity) {
+        const timeSinceActivity = now - lastActivity;
+        
+        if (this.settings.timerPersistenceMode === 'absolute') {
+          // Absolute mode: Close tabs that should have been closed during downtime
+          const shouldSkipPinned = tab.pinned && this.settings.excludePinned;
+          if (timeSinceActivity > timeoutMs && !tab.active && !shouldSkipPinned && !this.isExcludedDomain(tab.url)) {
+            console.log(`🗑️ Closing expired tab: ${tab.title} (inactive for ${Math.round(timeSinceActivity/1000)}s)`);
+            await this.closeAndSaveTab(tab);
+            expiredCount++;
+          }
+        } else if (this.settings.timerPersistenceMode === 'continue') {
+          // Continue mode: Reset timers to continue from where they left off
+          if (timeSinceActivity > timeoutMs) {
+            console.log(`⏰ Continuing timer for tab: ${tab.title} (was inactive for ${Math.round(timeSinceActivity/1000)}s, resetting to fresh timeout)`);
+            this.resetTabTimer(tab.id);
+            continuedCount++;
+          }
+        }
+      }
+    }
+    
+    if (this.settings.timerPersistenceMode === 'absolute' && expiredCount > 0) {
+      console.log(`✅ Closed ${expiredCount} tabs that expired during downtime`);
+    } else if (this.settings.timerPersistenceMode === 'continue' && continuedCount > 0) {
+      console.log(`✅ Continued ${continuedCount} timers from where they left off`);
+    } else {
+      console.log('✅ No timer adjustments needed');
+    }
+  }
+
+  async saveTabActivity() {
+    // Convert Map to object for storage
+    const tabActivityObj = Object.fromEntries(this.tabActivity);
+    await chrome.storage.local.set({ tabActivity: tabActivityObj });
+  }
+
   setupEventListeners() {
     chrome.tabs.onActivated.addListener((activeInfo) => {
       console.log(`🔄 Tab activated: ${activeInfo.tabId} - resetting timer`);
@@ -68,6 +136,10 @@ class AutoCloseManager {
 
     chrome.tabs.onRemoved.addListener((tabId) => {
       this.tabActivity.delete(tabId);
+      // Persist the updated activity to storage
+      this.saveTabActivity().catch(err => {
+        console.error('❌ Failed to save tab activity after tab removal:', err);
+      });
     });
 
     chrome.storage.onChanged.addListener((changes, namespace) => {
@@ -112,6 +184,11 @@ class AutoCloseManager {
     
     // Always reset to current time - this is the key fix!
     this.tabActivity.set(tabId, now);
+    
+    // Persist the updated activity to storage
+    this.saveTabActivity().catch(err => {
+      console.error('❌ Failed to save tab activity:', err);
+    });
     
     // Get tab title for better logging
     chrome.tabs.get(tabId).then(tab => {
@@ -432,6 +509,11 @@ class AutoCloseManager {
     await chrome.tabs.remove(tab.id);
     
     this.tabActivity.delete(tab.id);
+    
+    // Persist the updated activity to storage
+    this.saveTabActivity().catch(err => {
+      console.error('❌ Failed to save tab activity after tab removal:', err);
+    });
   }
 }
 

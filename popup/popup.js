@@ -5,7 +5,8 @@ class PopupManager {
       timeValue: 30,
       timeUnit: 'minutes',
       excludedDomains: [],
-      excludePinned: true
+      excludePinned: true,
+      timerPersistenceMode: 'absolute'
     };
     this.init();
   }
@@ -36,6 +37,14 @@ class PopupManager {
 
     document.getElementById('timeUnit').addEventListener('change', (e) => {
       this.settings.timeUnit = e.target.value;
+    });
+
+    document.querySelectorAll('input[name="timerPersistence"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        if (e.target.checked) {
+          this.settings.timerPersistenceMode = e.target.value;
+        }
+      });
     });
 
     document.getElementById('debugToggle').addEventListener('change', (e) => {
@@ -78,6 +87,14 @@ class PopupManager {
     document.getElementById('enableToggle').checked = this.settings.enabled;
     document.getElementById('timeValue').value = this.settings.timeValue;
     document.getElementById('timeUnit').value = this.settings.timeUnit;
+    
+    // Set radio button for timer persistence mode
+    const persistenceMode = this.settings.timerPersistenceMode || 'absolute';
+    const radioButton = document.querySelector(`input[name="timerPersistence"][value="${persistenceMode}"]`);
+    if (radioButton) {
+      radioButton.checked = true;
+    }
+    
     document.getElementById('debugToggle').checked = this.settings.debugMode || false;
     this.updateSettingsVisibility();
     this.updateDebugVisibility();
