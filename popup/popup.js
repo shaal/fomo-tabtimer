@@ -6,9 +6,16 @@ class PopupManager {
       timeUnit: 'minutes',
       excludedDomains: [],
       excludePinned: true,
-      timerPersistenceMode: 'absolute'
+      timerPersistenceMode: 'absolute',
+      debugMode: false
     };
     this.init();
+  }
+
+  debugLog(message, ...args) {
+    if (this.settings.debugMode) {
+      console.log(`🔤 [PopupManager] ${message}`, ...args);
+    }
   }
 
   async init() {

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Extension Communication Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        button {
+            margin: 5px;
+            padding: 10px 15px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 3px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Extension Communication Test</h1>
+    
+    <div class="test-section">
+        <h2>Basic Tests</h2>
+        <button onclick="testBasicCommunication()">Test Basic Communication</button>
+        <button onclick="testDebugInfo()">Test Debug Info</button>
+        <button onclick="testMemoryUsage()">Test Memory Usage</button>
+        <button onclick="testManualClose()">Test Manual Close</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Extension Status</h2>
+        <div id="extensionStatus">Checking...</div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test Results</h2>
+        <div id="testResults"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Debug Console</h2>
+        <pre id="debugConsole"></pre>
+    </div>
+
+    <script>
+        let logCount = 0;
+        
+        function log(message, type = 'info') {
+            logCount++;
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}\n`;
+            
+            const console = document.getElementById('debugConsole');
+            console.textContent += logEntry;
+            console.scrollTop = console.scrollHeight;
+            
+            if (type === 'error') {
+                console.error(message);
+            } else {
+                console.log(message);
+            }
+        }
+        
+        function updateResults(testName, result, success) {
+            const resultsDiv = document.getElementById('testResults');
+            const resultClass = success ? 'success' : 'error';
+            
+            resultsDiv.innerHTML += `
+                <div class="test-section ${resultClass}">
+                    <h3>${testName}</h3>
+                    <pre>${JSON.stringify(result, null, 2)}</pre>
+                </div>
+            `;
+        }
+        
+        async function testBasicCommunication() {
+            log('🧪 Testing basic communication...');
+            
+            try {
+                const response = await chrome.runtime.sendMessage({ type: 'test' });
+                log('✅ Basic communication successful');
+                updateResults('Basic Communication', response, true);
+            } catch (error) {
+                log(`❌ Basic communication failed: ${error.message}`, 'error');
+                updateResults('Basic Communication', { error: error.message }, false);
+            }
+        }
+        
+        async function testDebugInfo() {
+            log('🧪 Testing debug info...');
+            
+            try {
+                const response = await chrome.runtime.sendMessage({ type: 'getDebugInfo' });
+                log('✅ Debug info retrieved successfully');
+                updateResults('Debug Info', response, true);
+            } catch (error) {
+                log(`❌ Debug info failed: ${error.message}`, 'error');
+                updateResults('Debug Info', { error: error.message }, false);
+            }
+        }
+        
+        async function testMemoryUsage() {
+            log('🧪 Testing memory usage...');
+            
+            try {
+                const response = await chrome.runtime.sendMessage({ type: 'getMemoryUsage' });
+                log('✅ Memory usage retrieved successfully');
+                updateResults('Memory Usage', response, true);
+            } catch (error) {
+                log(`❌ Memory usage failed: ${error.message}`, 'error');
+                updateResults('Memory Usage', { error: error.message }, false);
+            }
+        }
+        
+        async function testManualClose() {
+            log('🧪 Testing manual close...');
+            
+            try {
+                const response = await chrome.runtime.sendMessage({ type: 'manualCloseTest' });
+                log('✅ Manual close test completed');
+                updateResults('Manual Close Test', response, response.success);
+            } catch (error) {
+                log(`❌ Manual close test failed: ${error.message}`, 'error');
+                updateResults('Manual Close Test', { error: error.message }, false);
+            }
+        }
+        
+        async function checkExtensionStatus() {
+            const statusDiv = document.getElementById('extensionStatus');
+            
+            try {
+                // Check if chrome.runtime is available
+                if (!chrome.runtime) {
+                    statusDiv.innerHTML = '<div class="error">❌ Chrome runtime not available</div>';
+                    return;
+                }
+                
+                // Check if we can get the extension ID
+                const extensionId = chrome.runtime.id;
+                statusDiv.innerHTML = `
+                    <div class="success">
+                        ✅ Extension loaded<br>
+                        ID: ${extensionId}
+                    </div>
+                `;
+                
+                log(`Extension ID: ${extensionId}`);
+                
+                // Try basic communication
+                await testBasicCommunication();
+                
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+                log(`Extension status check failed: ${error.message}`, 'error');
+            }
+        }
+        
+        // Initialize when page loads
+        window.addEventListener('load', () => {
+            log('🚀 Communication test page loaded');
+            checkExtensionStatus();
+        });
+    </script>
+</body>
+</html>

@@ -8,7 +8,7 @@ const fs = require('fs');
 class ExtensionTester {
   constructor() {
     this.browser = null;
-    this.extensionPath = __dirname;
+    this.extensionPath = path.dirname(__dirname);
     this.testResults = [];
   }
 

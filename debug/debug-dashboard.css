@@ -171,6 +171,49 @@ body {
   color: #38a169;
 }
 
+.tab-timer.critical {
+  color: #e53e3e;
+  animation: pulse 1s infinite;
+}
+
+.tab-timer.closing {
+  color: #ffffff;
+  background-color: #e53e3e;
+  padding: 4px 8px;
+  border-radius: 4px;
+  animation: blink 0.5s infinite;
+}
+
+.tab-timer.active {
+  color: #38a169;
+  background-color: #f0fff4;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.tab-timer.excluded {
+  color: #718096;
+  background-color: #f7fafc;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.tab-status {
+  font-size: 10px;
+  color: #718096;
+  margin-top: 2px;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.3; }
+}
+
 .log-controls {
   display: flex;
   gap: 8px;

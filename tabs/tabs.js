@@ -6,14 +6,33 @@ class TabsManager {
     this.filteredTabs = [];
     this.currentFilter = 'all';
     this.searchQuery = '';
+    this.debugMode = false;
     this.init();
   }
 
+  debugLog(message, ...args) {
+    if (this.debugMode) {
+      console.log(`🔤 [TabsManager] ${message}`, ...args);
+    }
+  }
+
   async init() {
+    await this.loadSettings();
     this.setupEventListeners();
     await this.loadTabs();
     this.renderTabs();
     this.updateStats();
+  }
+
+  async loadSettings() {
+    try {
+      const stored = await chrome.storage.sync.get(['autoCloseSettings']);
+      if (stored.autoCloseSettings) {
+        this.debugMode = stored.autoCloseSettings.debugMode || false;
+      }
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
   }
 
   setupEventListeners() {
@@ -277,17 +296,17 @@ class TabsManager {
   }
 
   async restoreTab(tabId) {
-    console.log('🔄 Attempting to restore tab with ID:', tabId);
+    this.debugLog('Attempting to restore tab with ID:', tabId);
     
     // Refresh the tab list first to ensure we have the latest data
     await this.loadTabs();
     
     const tab = this.allTabs.find(t => String(t.id) === String(tabId));
-    console.log('📋 Found tab:', tab);
+    this.debugLog('Found tab:', tab);
     
     if (!tab) {
       console.error('❌ Tab not found with ID:', tabId);
-      console.log('Available tab IDs:', this.allTabs.map(t => t.id));
+      this.debugLog('Available tab IDs:', this.allTabs.map(t => t.id));
       this.showNotification('Tab not found. It may have already been restored.', 'error');
       return;
     }
@@ -299,7 +318,7 @@ class TabsManager {
     }
     
     try {
-      console.log('🌐 Creating new tab with URL:', tab.url);
+      this.debugLog('Creating new tab with URL:', tab.url);
       
       // Create the new tab
       const newTab = await chrome.tabs.create({ 
@@ -307,18 +326,18 @@ class TabsManager {
         active: true 
       });
       
-      console.log('✅ New tab created successfully:', newTab.id);
+      this.debugLog('New tab created successfully:', newTab.id);
       
       // Remove the tab from storage AFTER successful creation
-      console.log('🗑️ Removing tab from storage...');
+      this.debugLog('Removing tab from storage...');
       const { savedTabs = [] } = await chrome.storage.local.get(['savedTabs']);
       const originalCount = savedTabs.length;
       const filteredTabs = savedTabs.filter(t => String(t.id) !== String(tabId));
       
-      console.log(`📊 Tabs before removal: ${originalCount}, after: ${filteredTabs.length}`);
+      this.debugLog(`Tabs before removal: ${originalCount}, after: ${filteredTabs.length}`);
       
       await chrome.storage.local.set({ savedTabs: filteredTabs });
-      console.log('💾 Storage updated successfully');
+      this.debugLog('Storage updated successfully');
       
       // Reload the tabs list to reflect changes
       await this.loadTabs();
