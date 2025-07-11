@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Manual Test - FOMO TabTimer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .test-section {
+      background: #f5f5f5;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 5px;
+    }
+    .button {
+      background: #4CAF50;
+      color: white;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+    }
+    .button:hover {
+      background: #45a049;
+    }
+    .danger {
+      background: #f44336;
+    }
+    .danger:hover {
+      background: #da190b;
+    }
+    .info {
+      background: #2196F3;
+    }
+    .info:hover {
+      background: #1976D2;
+    }
+    .result {
+      background: white;
+      padding: 10px;
+      margin: 10px 0;
+      border-left: 4px solid #4CAF50;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 Manual Test - FOMO TabTimer Extension</h1>
+  
+  <div class="test-section">
+    <h3>Step 1: Create Test Data</h3>
+    <p>First, let's create some test saved tabs to work with:</p>
+    <button class="button" onclick="createTestData()">Create Test Saved Tabs</button>
+    <div id="createResult" class="result" style="display:none;"></div>
+  </div>
+
+  <div class="test-section">
+    <h3>Step 2: View Saved Tabs</h3>
+    <p>Check what tabs are currently saved:</p>
+    <button class="button info" onclick="viewSavedTabs()">View Saved Tabs</button>
+    <div id="viewResult" class="result" style="display:none;"></div>
+  </div>
+
+  <div class="test-section">
+    <h3>Step 3: Test Restore Functionality</h3>
+    <p>Try to restore the first saved tab:</p>
+    <button class="button" onclick="testRestore()">Restore First Tab</button>
+    <div id="restoreResult" class="result" style="display:none;"></div>
+  </div>
+
+  <div class="test-section">
+    <h3>Step 4: Open Tabs Manager</h3>
+    <p>Open the full tabs manager interface:</p>
+    <button class="button info" onclick="openTabsManager()">Open Tabs Manager</button>
+  </div>
+
+  <div class="test-section">
+    <h3>Step 5: Clear Test Data</h3>
+    <p>Clean up the test data:</p>
+    <button class="button danger" onclick="clearTestData()">Clear All Saved Tabs</button>
+    <div id="clearResult" class="result" style="display:none;"></div>
+  </div>
+
+  <script>
+    async function createTestData() {
+      const testTabs = [
+        {
+          id: `tab_${Date.now()}_001`,
+          url: 'https://example.com',
+          title: 'Example Domain',
+          favicon: 'https://example.com/favicon.ico',
+          windowTitle: `Closed at ${new Date().toLocaleTimeString()} on ${new Date().toLocaleDateString()}`,
+          closedAt: new Date().toISOString(),
+          date: new Date().toDateString()
+        },
+        {
+          id: `tab_${Date.now()}_002`,
+          url: 'https://google.com',
+          title: 'Google',
+          favicon: 'https://google.com/favicon.ico',
+          windowTitle: `Closed at ${new Date().toLocaleTimeString()} on ${new Date().toLocaleDateString()}`,
+          closedAt: new Date().toISOString(),
+          date: new Date().toDateString()
+        },
+        {
+          id: `tab_${Date.now()}_003`,
+          url: 'https://github.com',
+          title: 'GitHub',
+          favicon: 'https://github.com/favicon.ico',
+          windowTitle: `Closed at ${new Date().toLocaleTimeString()} on ${new Date().toLocaleDateString()}`,
+          closedAt: new Date().toISOString(),
+          date: new Date().toDateString()
+        }
+      ];
+
+      try {
+        await new Promise((resolve) => {
+          chrome.storage.local.set({ savedTabs: testTabs }, resolve);
+        });
+        
+        document.getElementById('createResult').style.display = 'block';
+        document.getElementById('createResult').innerHTML = 
+          `✅ Created ${testTabs.length} test tabs successfully!<br>` +
+          `Tab IDs: ${testTabs.map(t => t.id).join(', ')}`;
+      } catch (error) {
+        document.getElementById('createResult').style.display = 'block';
+        document.getElementById('createResult').innerHTML = `❌ Error: ${error.message}`;
+      }
+    }
+
+    async function viewSavedTabs() {
+      try {
+        const { savedTabs = [] } = await new Promise((resolve) => {
+          chrome.storage.local.get(['savedTabs'], resolve);
+        });
+        
+        document.getElementById('viewResult').style.display = 'block';
+        document.getElementById('viewResult').innerHTML = 
+          `📋 Found ${savedTabs.length} saved tabs:<br>` +
+          savedTabs.map(tab => `• ${tab.title} (${tab.url}) - ID: ${tab.id}`).join('<br>');
+      } catch (error) {
+        document.getElementById('viewResult').style.display = 'block';
+        document.getElementById('viewResult').innerHTML = `❌ Error: ${error.message}`;
+      }
+    }
+
+    async function testRestore() {
+      try {
+        const { savedTabs = [] } = await new Promise((resolve) => {
+          chrome.storage.local.get(['savedTabs'], resolve);
+        });
+        
+        if (savedTabs.length === 0) {
+          document.getElementById('restoreResult').style.display = 'block';
+          document.getElementById('restoreResult').innerHTML = '⚠️ No saved tabs found. Create test data first.';
+          return;
+        }
+
+        const firstTab = savedTabs[0];
+        console.log('Attempting to restore tab:', firstTab);
+        
+        // Create new tab
+        const newTab = await chrome.tabs.create({ url: firstTab.url });
+        console.log('New tab created:', newTab);
+        
+        // Remove from storage
+        const filteredTabs = savedTabs.filter(t => String(t.id) !== String(firstTab.id));
+        await new Promise((resolve) => {
+          chrome.storage.local.set({ savedTabs: filteredTabs }, resolve);
+        });
+        
+        document.getElementById('restoreResult').style.display = 'block';
+        document.getElementById('restoreResult').innerHTML = 
+          `✅ Successfully restored tab: ${firstTab.title}<br>` +
+          `New tab ID: ${newTab.id}<br>` +
+          `Remaining saved tabs: ${filteredTabs.length}`;
+      } catch (error) {
+        console.error('Restore failed:', error);
+        document.getElementById('restoreResult').style.display = 'block';
+        document.getElementById('restoreResult').innerHTML = `❌ Restore failed: ${error.message}`;
+      }
+    }
+
+    async function openTabsManager() {
+      try {
+        await chrome.tabs.create({ url: chrome.runtime.getURL('tabs/tabs.html') });
+      } catch (error) {
+        alert('Failed to open tabs manager: ' + error.message);
+      }
+    }
+
+    async function clearTestData() {
+      try {
+        await new Promise((resolve) => {
+          chrome.storage.local.set({ savedTabs: [] }, resolve);
+        });
+        
+        document.getElementById('clearResult').style.display = 'block';
+        document.getElementById('clearResult').innerHTML = '✅ All saved tabs cleared successfully!';
+      } catch (error) {
+        document.getElementById('clearResult').style.display = 'block';
+        document.getElementById('clearResult').innerHTML = `❌ Error: ${error.message}`;
+      }
+    }
+
+    // Test extension availability on load
+    window.addEventListener('load', () => {
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        console.log('✅ Chrome extension APIs available');
+      } else {
+        console.log('❌ Chrome extension APIs not available');
+        alert('⚠️ This page must be loaded as part of the Chrome extension to work properly.');
+      }
+    });
+  </script>
+</body>
+</html>

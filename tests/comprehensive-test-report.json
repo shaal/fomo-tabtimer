@@ -1,0 +1,69 @@
+{
+  "testSuite": "Comprehensive Chrome Extension Tests",
+  "timestamp": "2025-07-10T18:46:00.041Z",
+  "summary": {
+    "totalTests": 4,
+    "passedTests": 4,
+    "failedTests": 0,
+    "totalConsoleLogs": 1
+  },
+  "testResults": [
+    {
+      "test": "Extension Loading",
+      "passed": true,
+      "details": "Extension loaded successfully",
+      "timestamp": "2025-07-10T18:45:34.033Z"
+    },
+    {
+      "test": "Wildcard Domain Exclusion Logic",
+      "passed": true,
+      "details": {
+        "totalTests": 12,
+        "passedTests": 12,
+        "failedTests": 0,
+        "googleTests": 7,
+        "googlePassed": 7
+      },
+      "timestamp": "2025-07-10T18:45:34.040Z"
+    },
+    {
+      "test": "Real Browser Behavior",
+      "passed": true,
+      "details": {
+        "pagesLoaded": 4,
+        "totalPages": 4,
+        "consoleLogs": 0
+      },
+      "timestamp": "2025-07-10T18:45:54.806Z"
+    },
+    {
+      "test": "Specific Google.com Behavior",
+      "passed": true,
+      "details": {
+        "pageLoaded": true,
+        "title": "Mock Google Library",
+        "consoleLogs": 1
+      },
+      "timestamp": "2025-07-10T18:46:00.041Z"
+    }
+  ],
+  "consoleLogs": [
+    {
+      "source": "google_test",
+      "message": "🔗 Current URL: file:///home/shaal/code/test/auto-close-chrome-extension/test-google-mock.html",
+      "timestamp": "2025-07-10T18:45:55.022Z"
+    }
+  ],
+  "findings": {
+    "extensionLoading": true,
+    "wildcardLogic": true,
+    "browserBehavior": true,
+    "googleBehavior": true
+  },
+  "recommendations": [
+    "✅ Wildcard domain exclusion logic is working correctly",
+    "✅ Google.com exclusion pattern (*.google.com) is properly configured",
+    "🔧 For production testing, configure shorter timeout values in extension settings",
+    "🔧 Monitor browser console for real-time domain exclusion behavior"
+  ]
+}

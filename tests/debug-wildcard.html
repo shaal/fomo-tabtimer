@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Debug Wildcard Domain Exclusion</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .test-box {
+      background: white;
+      padding: 20px;
+      margin: 10px 0;
+      border-radius: 8px;
+      border-left: 4px solid #2196F3;
+    }
+    .button {
+      background: #4CAF50;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+      font-size: 14px;
+    }
+    .button:hover {
+      background: #45a049;
+    }
+    .danger {
+      background: #f44336;
+    }
+    .danger:hover {
+      background: #da190b;
+    }
+    .info {
+      background: #2196F3;
+    }
+    .info:hover {
+      background: #1976D2;
+    }
+    .result {
+      background: #f9f9f9;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 4px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .status {
+      padding: 10px;
+      border-radius: 4px;
+      margin: 10px 0;
+      font-weight: bold;
+    }
+    .success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    .warning {
+      background: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeaa7;
+    }
+  </style>
+</head>
+<body>
+  <h1>🐛 Debug Wildcard Domain Exclusion</h1>
+  
+  <div class="test-box">
+    <h3>Current Settings</h3>
+    <button class="button info" onclick="checkSettings()">Load Current Settings</button>
+    <div id="settingsResult" class="result" style="display:none;"></div>
+  </div>
+
+  <div class="test-box">
+    <h3>Test Domain Exclusion</h3>
+    <p>Test if specific URLs would be excluded:</p>
+    <input type="text" id="testUrl" placeholder="https://home.google.com/library" style="width: 300px; padding: 8px;">
+    <button class="button" onclick="testDomainExclusion()">Test URL</button>
+    <div id="testResult" class="result" style="display:none;"></div>
+  </div>
+
+  <div class="test-box">
+    <h3>Add Test Exclusion</h3>
+    <p>Add *.google.com to exclusions:</p>
+    <button class="button" onclick="addGoogleExclusion()">Add *.google.com</button>
+    <button class="button danger" onclick="clearExclusions()">Clear All Exclusions</button>
+    <div id="addResult" class="result" style="display:none;"></div>
+  </div>
+
+  <div class="test-box">
+    <h3>Real-time Console Monitor</h3>
+    <p>Monitor background script console in real-time:</p>
+    <button class="button info" onclick="openBackgroundConsole()">Open Background Console</button>
+    <div class="status warning">
+      <strong>Instructions:</strong>
+      <br>1. Click "Open Background Console" to see live logs
+      <br>2. Set a short timeout (10 seconds) in the extension popup
+      <br>3. Open google.com pages in other tabs
+      <br>4. Watch the console for domain exclusion logs
+    </div>
+  </div>
+
+  <div class="test-box">
+    <h3>Step-by-Step Debug</h3>
+    <button class="button" onclick="runFullDebug()">Run Complete Debug Sequence</button>
+    <div id="debugResult" class="result" style="display:none;"></div>
+  </div>
+
+  <script>
+    async function checkSettings() {
+      try {
+        const { autoCloseSettings } = await new Promise((resolve) => {
+          chrome.storage.sync.get(['autoCloseSettings'], resolve);
+        });
+        
+        document.getElementById('settingsResult').style.display = 'block';
+        document.getElementById('settingsResult').textContent = 
+          `Current Settings:\n${JSON.stringify(autoCloseSettings || 'No settings found', null, 2)}`;
+      } catch (error) {
+        document.getElementById('settingsResult').style.display = 'block';
+        document.getElementById('settingsResult').textContent = `Error: ${error.message}`;
+      }
+    }
+
+    async function testDomainExclusion() {
+      const url = document.getElementById('testUrl').value || 'https://home.google.com/library';
+      
+      try {
+        const { autoCloseSettings } = await new Promise((resolve) => {
+          chrome.storage.sync.get(['autoCloseSettings'], resolve);
+        });
+        
+        if (!autoCloseSettings || !autoCloseSettings.excludedDomains) {
+          document.getElementById('testResult').style.display = 'block';
+          document.getElementById('testResult').textContent = 'No excluded domains configured!';
+          return;
+        }
+        
+        const domain = new URL(url).hostname;
+        const patterns = autoCloseSettings.excludedDomains;
+        
+        let result = `Testing URL: ${url}\nDomain: ${domain}\nPatterns: ${patterns.join(', ')}\n\n`;
+        
+        const isExcluded = patterns.some(pattern => {
+          if (pattern.includes('*')) {
+            if (pattern.startsWith('*.')) {
+              const baseDomain = pattern.substring(2);
+              const regexPattern = `^[^.]+\\.${baseDomain.replace(/[.*+?^${}()|[\]\\]/g, '\\\\$&')}$`;
+              const regex = new RegExp(regexPattern);
+              const matches = regex.test(domain);
+              result += `Wildcard test: "${domain}" vs "${pattern}" (regex: ${regexPattern}) = ${matches}\n`;
+              return matches;
+            }
+          }
+          const exactMatch = domain === pattern;
+          const subdomainMatch = domain.endsWith('.' + pattern);
+          const matches = exactMatch || subdomainMatch;
+          result += `Exact/subdomain test: "${domain}" vs "${pattern}" = ${matches}\n`;
+          return matches;
+        });
+        
+        result += `\nFINAL RESULT: ${isExcluded ? 'EXCLUDED (will NOT be auto-closed)' : 'NOT EXCLUDED (will be auto-closed)'}`;
+        
+        document.getElementById('testResult').style.display = 'block';
+        document.getElementById('testResult').textContent = result;
+        
+      } catch (error) {
+        document.getElementById('testResult').style.display = 'block';
+        document.getElementById('testResult').textContent = `Error: ${error.message}`;
+      }
+    }
+
+    async function addGoogleExclusion() {
+      try {
+        const { autoCloseSettings = {} } = await new Promise((resolve) => {
+          chrome.storage.sync.get(['autoCloseSettings'], resolve);
+        });
+        
+        if (!autoCloseSettings.excludedDomains) {
+          autoCloseSettings.excludedDomains = [];
+        }
+        
+        if (!autoCloseSettings.excludedDomains.includes('*.google.com')) {
+          autoCloseSettings.excludedDomains.push('*.google.com');
+        }
+        
+        await new Promise((resolve) => {
+          chrome.storage.sync.set({ autoCloseSettings }, resolve);
+        });
+        
+        document.getElementById('addResult').style.display = 'block';
+        document.getElementById('addResult').textContent = 
+          `✅ Added *.google.com to exclusions!\nCurrent exclusions: ${autoCloseSettings.excludedDomains.join(', ')}`;
+      } catch (error) {
+        document.getElementById('addResult').style.display = 'block';
+        document.getElementById('addResult').textContent = `Error: ${error.message}`;
+      }
+    }
+
+    async function clearExclusions() {
+      try {
+        const { autoCloseSettings = {} } = await new Promise((resolve) => {
+          chrome.storage.sync.get(['autoCloseSettings'], resolve);
+        });
+        
+        autoCloseSettings.excludedDomains = [];
+        
+        await new Promise((resolve) => {
+          chrome.storage.sync.set({ autoCloseSettings }, resolve);
+        });
+        
+        document.getElementById('addResult').style.display = 'block';
+        document.getElementById('addResult').textContent = '🗑️ Cleared all exclusions!';
+      } catch (error) {
+        document.getElementById('addResult').style.display = 'block';
+        document.getElementById('addResult').textContent = `Error: ${error.message}`;
+      }
+    }
+
+    function openBackgroundConsole() {
+      chrome.tabs.create({ url: 'chrome://extensions/' });
+      alert('1. Go to chrome://extensions/\n2. Find "FOMO TabTimer" extension\n3. Click "service worker" link\n4. Watch the console for domain exclusion logs');
+    }
+
+    async function runFullDebug() {
+      let debugLog = 'Starting full debug sequence...\n\n';
+      
+      try {
+        // Step 1: Check settings
+        debugLog += '1. Checking current settings:\n';
+        const { autoCloseSettings } = await new Promise((resolve) => {
+          chrome.storage.sync.get(['autoCloseSettings'], resolve);
+        });
+        debugLog += `   Settings: ${JSON.stringify(autoCloseSettings, null, 2)}\n\n`;
+        
+        // Step 2: Add google exclusion if not present
+        debugLog += '2. Ensuring *.google.com is in exclusions:\n';
+        const settings = autoCloseSettings || {};
+        if (!settings.excludedDomains) settings.excludedDomains = [];
+        if (!settings.excludedDomains.includes('*.google.com')) {
+          settings.excludedDomains.push('*.google.com');
+          await new Promise((resolve) => {
+            chrome.storage.sync.set({ autoCloseSettings: settings }, resolve);
+          });
+          debugLog += '   ✅ Added *.google.com to exclusions\n';
+        } else {
+          debugLog += '   ℹ️ *.google.com already in exclusions\n';
+        }
+        
+        // Step 3: Test the exclusion
+        debugLog += '\n3. Testing domain exclusion:\n';
+        const testUrl = 'https://home.google.com/library';
+        const domain = new URL(testUrl).hostname;
+        const pattern = '*.google.com';
+        const baseDomain = pattern.substring(2);
+        const regexPattern = `^[^.]+\\.${baseDomain.replace(/[.*+?^${}()|[\]\\]/g, '\\\\$&')}$`;
+        const regex = new RegExp(regexPattern);
+        const matches = regex.test(domain);
+        
+        debugLog += `   URL: ${testUrl}\n`;
+        debugLog += `   Domain: ${domain}\n`;
+        debugLog += `   Pattern: ${pattern}\n`;
+        debugLog += `   Regex: ${regexPattern}\n`;
+        debugLog += `   Matches: ${matches}\n`;
+        debugLog += `   Result: ${matches ? 'EXCLUDED (protected)' : 'NOT EXCLUDED (will close)'}\n\n`;
+        
+        debugLog += '4. Next steps:\n';
+        debugLog += '   - Open a google.com page in another tab\n';
+        debugLog += '   - Set timeout to 10 seconds in extension popup\n';
+        debugLog += '   - Switch away from the google tab\n';
+        debugLog += '   - Watch the background console for exclusion logs\n';
+        debugLog += '   - The tab should NOT close after 10 seconds\n';
+        
+        document.getElementById('debugResult').style.display = 'block';
+        document.getElementById('debugResult').textContent = debugLog;
+        
+      } catch (error) {
+        debugLog += `\nERROR: ${error.message}`;
+        document.getElementById('debugResult').style.display = 'block';
+        document.getElementById('debugResult').textContent = debugLog;
+      }
+    }
+
+    // Auto-load settings on page load
+    window.addEventListener('load', () => {
+      if (typeof chrome !== 'undefined' && chrome.storage) {
+        checkSettings();
+      } else {
+        alert('⚠️ This page must be loaded as part of the Chrome extension to work properly.');
+      }
+    });
+  </script>
+</body>
+</html>

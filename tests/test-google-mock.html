@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mock Google Library</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            background-color: #e8f5e8;
+            border: 1px solid #4CAF50;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 20px;
+        }
+        .timer {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📚 Google Library</h1>
+        <p>Mock page for testing auto-close extension</p>
+    </div>
+    
+    <div class="content">
+        <h2>Test Page Information</h2>
+        <p><strong>URL:</strong> <span id="currentUrl"></span></p>
+        <p><strong>Domain:</strong> <span id="currentDomain"></span></p>
+        <p><strong>Page Load Time:</strong> <span id="loadTime"></span></p>
+        
+        <div class="status">
+            <h3>✅ Extension Test Status</h3>
+            <p>This page simulates <code>https://home.google.com/library</code> and should be protected by the <code>*.google.com</code> wildcard exclusion rule.</p>
+        </div>
+        
+        <div class="timer">
+            <h3>⏱️ Page Activity Timer</h3>
+            <p>Page has been active for: <span id="activeTime">0</span> seconds</p>
+            <p>Last activity: <span id="lastActivity"></span></p>
+        </div>
+        
+        <div class="content">
+            <h3>🧪 Testing Instructions</h3>
+            <ol>
+                <li>This page should be excluded from auto-close due to the <code>*.google.com</code> pattern</li>
+                <li>Check browser console for domain matching logs</li>
+                <li>Switch to other tabs to test timer reset functionality</li>
+                <li>Wait for auto-close timeout to verify exclusion works</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        // Display current page information
+        document.getElementById('currentUrl').textContent = window.location.href;
+        document.getElementById('currentDomain').textContent = window.location.hostname;
+        document.getElementById('loadTime').textContent = new Date().toLocaleTimeString();
+        
+        // Update activity timer
+        const startTime = Date.now();
+        let lastActivity = Date.now();
+        
+        const updateTimer = () => {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            document.getElementById('activeTime').textContent = elapsed;
+            document.getElementById('lastActivity').textContent = new Date(lastActivity).toLocaleTimeString();
+        };
+        
+        // Update timer every second
+        setInterval(updateTimer, 1000);
+        
+        // Track user activity
+        ['click', 'keydown', 'mousemove', 'scroll'].forEach(eventType => {
+            document.addEventListener(eventType, () => {
+                lastActivity = Date.now();
+            });
+        });
+        
+        // Log to console for debugging
+        console.log('🏠 Google Library mock page loaded');
+        console.log('📍 Current domain:', window.location.hostname);
+        console.log('🔗 Current URL:', window.location.href);
+        console.log('⏰ Load time:', new Date().toISOString());
+    </script>
+</body>
+</html>

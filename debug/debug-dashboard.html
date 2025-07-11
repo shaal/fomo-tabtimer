@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>FOMO TabTimer - Debug Dashboard</title>
+  <link rel="stylesheet" href="debug-dashboard.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>🐛 FOMO TabTimer - Debug Dashboard</h1>
+      <div class="header-actions">
+        <button id="refreshAll" class="btn-primary">🔄 Refresh All</button>
+        <button id="toggleAutoRefresh" class="btn-secondary">⏸️ Auto Refresh</button>
+        <span class="refresh-indicator" id="refreshIndicator">●</span>
+      </div>
+    </header>
+
+    <div class="dashboard-grid">
+      <!-- Extension Stats -->
+      <div class="card">
+        <h3>📊 Extension Statistics</h3>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">Uptime</span>
+            <span class="stat-value" id="statUptime">--</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Tracked Tabs</span>
+            <span class="stat-value" id="statTrackedTabs">--</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Excluded Domains</span>
+            <span class="stat-value" id="statExcludedDomains">--</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Check Count</span>
+            <span class="stat-value" id="statCheckCount">--</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Saved Tabs</span>
+            <span class="stat-value" id="statSavedTabs">--</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Last Check</span>
+            <span class="stat-value" id="statLastCheck">--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Current Settings -->
+      <div class="card">
+        <h3>⚙️ Current Settings</h3>
+        <div class="settings-display" id="settingsDisplay">
+          Loading settings...
+        </div>
+      </div>
+
+      <!-- Active Tabs Monitor -->
+      <div class="card full-width">
+        <h3>📱 Active Tabs Monitor</h3>
+        <div class="tabs-monitor" id="tabsMonitor">
+          Loading tabs...
+        </div>
+      </div>
+
+      <!-- Recent Activity Log -->
+      <div class="card full-width">
+        <h3>📝 Recent Activity Log</h3>
+        <div class="log-controls">
+          <button id="clearLog" class="btn-small">Clear Log</button>
+          <button id="exportLog" class="btn-small">Export Log</button>
+          <label>
+            <input type="checkbox" id="autoScrollLog" checked> Auto-scroll
+          </label>
+        </div>
+        <div class="activity-log" id="activityLog">
+          <div class="log-entry">
+            <span class="log-time">Loading...</span>
+            <span class="log-message">Starting debug dashboard</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Memory Usage Chart -->
+      <div class="card">
+        <h3>💾 Memory Usage</h3>
+        <div class="memory-display">
+          <div class="memory-chart" id="memoryChart">
+            <div class="chart-placeholder">Memory tracking will appear here</div>
+          </div>
+          <div class="memory-stats" id="memoryStats">
+            <div class="memory-stat">
+              <span>Current:</span>
+              <span id="memCurrent">-- MB</span>
+            </div>
+            <div class="memory-stat">
+              <span>Peak:</span>
+              <span id="memPeak">-- MB</span>
+            </div>
+            <div class="memory-stat">
+              <span>Average:</span>
+              <span id="memAverage">-- MB</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Performance Metrics -->
+      <div class="card">
+        <h3>⚡ Performance Metrics</h3>
+        <div class="perf-metrics" id="perfMetrics">
+          <div class="perf-item">
+            <span class="perf-label">Avg Check Time</span>
+            <span class="perf-value" id="perfCheckTime">-- ms</span>
+          </div>
+          <div class="perf-item">
+            <span class="perf-label">Tabs Closed Today</span>
+            <span class="perf-value" id="perfTabsClosed">--</span>
+          </div>
+          <div class="perf-item">
+            <span class="perf-label">Exclusions Hit</span>
+            <span class="perf-value" id="perfExclusionsHit">--</span>
+          </div>
+          <div class="perf-item">
+            <span class="perf-label">Timer Resets</span>
+            <span class="perf-value" id="perfTimerResets">--</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Test Controls -->
+    <div class="test-controls">
+      <h3>🧪 Test Controls</h3>
+      <div class="test-buttons">
+        <button id="testDomainExclusion" class="btn-test">Test Domain Exclusion</button>
+        <button id="simulateTabClose" class="btn-test">Simulate Tab Close</button>
+        <button id="resetAllTimers" class="btn-test">Reset All Timers</button>
+        <button id="triggerMemoryCheck" class="btn-test">Memory Check</button>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <p>Debug dashboard for FOMO TabTimer extension • Last updated: <span id="lastUpdated">Never</span></p>
+    </footer>
+  </div>
+
+  <script src="debug-dashboard.js"></script>
+</body>
+</html>

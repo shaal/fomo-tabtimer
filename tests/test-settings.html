@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Settings</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .test-box { background: #f0f0f0; padding: 15px; margin: 10px 0; border-radius: 5px; }
+    button { padding: 10px 20px; margin: 5px; background: #007cba; color: white; border: none; border-radius: 3px; cursor: pointer; }
+    .result { background: white; padding: 10px; margin: 10px 0; border-left: 3px solid #007cba; font-family: monospace; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>🔧 Settings Test</h1>
+  
+  <div class="test-box">
+    <h3>Test Current Settings</h3>
+    <button onclick="testLoadSettings()">Load Current Settings</button>
+    <button onclick="testSave10Seconds()">Save 10 Second Setting</button>
+    <button onclick="testSave30Minutes()">Save 30 Minute Setting</button>
+    <button onclick="clearSettings()">Clear All Settings</button>
+    <div id="result" class="result">Click a button to test settings...</div>
+  </div>
+
+  <div class="test-box">
+    <h3>Manual Settings Entry</h3>
+    <input type="number" id="testTimeValue" placeholder="Time Value" value="10">
+    <select id="testTimeUnit">
+      <option value="seconds">Seconds</option>
+      <option value="minutes">Minutes</option>
+      <option value="hours">Hours</option>
+      <option value="days">Days</option>
+    </select>
+    <label><input type="checkbox" id="testDebugMode"> Debug Mode</label>
+    <button onclick="saveCustomSettings()">Save Custom Settings</button>
+  </div>
+
+  <script>
+    async function testLoadSettings() {
+      try {
+        const result = await chrome.storage.sync.get(['autoCloseSettings']);
+        document.getElementById('result').textContent = 
+          `Current Settings:\n${JSON.stringify(result, null, 2)}`;
+      } catch (error) {
+        document.getElementById('result').textContent = `Error: ${error.message}`;
+      }
+    }
+
+    async function testSave10Seconds() {
+      try {
+        const settings = {
+          enabled: true,
+          timeValue: 10,
+          timeUnit: 'seconds',
+          excludedDomains: [],
+          excludePinned: true,
+          debugMode: false
+        };
+        
+        await chrome.storage.sync.set({ autoCloseSettings: settings });
+        document.getElementById('result').textContent = 
+          `✅ Saved 10 second setting:\n${JSON.stringify(settings, null, 2)}`;
+        
+        // Verify it was saved
+        setTimeout(testLoadSettings, 500);
+      } catch (error) {
+        document.getElementById('result').textContent = `Error: ${error.message}`;
+      }
+    }
+
+    async function testSave30Minutes() {
+      try {
+        const settings = {
+          enabled: true,
+          timeValue: 30,
+          timeUnit: 'minutes',
+          excludedDomains: [],
+          excludePinned: true,
+          debugMode: false
+        };
+        
+        await chrome.storage.sync.set({ autoCloseSettings: settings });
+        document.getElementById('result').textContent = 
+          `✅ Saved 30 minute setting:\n${JSON.stringify(settings, null, 2)}`;
+        
+        // Verify it was saved
+        setTimeout(testLoadSettings, 500);
+      } catch (error) {
+        document.getElementById('result').textContent = `Error: ${error.message}`;
+      }
+    }
+
+    async function saveCustomSettings() {
+      try {
+        const settings = {
+          enabled: true,
+          timeValue: parseInt(document.getElementById('testTimeValue').value) || 10,
+          timeUnit: document.getElementById('testTimeUnit').value,
+          excludedDomains: [],
+          excludePinned: true,
+          debugMode: document.getElementById('testDebugMode').checked
+        };
+        
+        await chrome.storage.sync.set({ autoCloseSettings: settings });
+        document.getElementById('result').textContent = 
+          `✅ Saved custom setting:\n${JSON.stringify(settings, null, 2)}`;
+        
+        // Verify it was saved
+        setTimeout(testLoadSettings, 500);
+      } catch (error) {
+        document.getElementById('result').textContent = `Error: ${error.message}`;
+      }
+    }
+
+    async function clearSettings() {
+      try {
+        await chrome.storage.sync.clear();
+        document.getElementById('result').textContent = `✅ All settings cleared`;
+        setTimeout(testLoadSettings, 500);
+      } catch (error) {
+        document.getElementById('result').textContent = `Error: ${error.message}`;
+      }
+    }
+
+    // Load current settings on page load
+    window.addEventListener('load', testLoadSettings);
+  </script>
+</body>
+</html>

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Timer Logic</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .test-box {
+      background: white;
+      padding: 20px;
+      margin: 10px 0;
+      border-radius: 8px;
+      border-left: 4px solid #2196F3;
+    }
+    .button {
+      background: #4CAF50;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px;
+      font-size: 14px;
+    }
+    .result {
+      background: #f9f9f9;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 4px;
+      font-family: monospace;
+      white-space: pre-wrap;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .step {
+      background: #e3f2fd;
+      padding: 10px;
+      margin: 5px 0;
+      border-radius: 4px;
+      border-left: 3px solid #2196F3;
+    }
+  </style>
+</head>
+<body>
+  <h1>🧪 Timer Logic Test</h1>
+  
+  <div class="test-box">
+    <h3>Test Scenario</h3>
+    <div class="step">
+      <strong>Step 1:</strong> Open this tab and another tab (e.g., google.com)
+    </div>
+    <div class="step">
+      <strong>Step 2:</strong> Set auto-close timeout to 10 seconds
+    </div>
+    <div class="step">
+      <strong>Step 3:</strong> Enable debug mode to see timers
+    </div>
+    <div class="step">
+      <strong>Step 4:</strong> Switch to the other tab, then come back to this tab after 5 seconds
+    </div>
+    <div class="step">
+      <strong>Step 5:</strong> Switch away again - the other tab should NOT close for another 10 seconds
+    </div>
+  </div>
+
+  <div class="test-box">
+    <h3>Debug Current Tab</h3>
+    <button class="button" onclick="getDebugInfo()">Get Current Tab Debug Info</button>
+    <button class="button" onclick="simulateActivity()">Simulate Activity (Reset Timer)</button>
+    <button class="button" onclick="getAllTabsInfo()">Get All Tabs Info</button>
+    <div id="debugResult" class="result" style="display:none;"></div>
+  </div>
+
+  <div class="test-box">
+    <h3>Expected Behavior</h3>
+    <p><strong>CORRECT:</strong> When you return to a tab, its timer should RESET to full timeout period</p>
+    <p><strong>WRONG:</strong> Timer continues counting from when you last left the tab</p>
+    
+    <h4>Example with 10s timeout:</h4>
+    <ul>
+      <li>Time 0s: Switch away from Tab A (timer starts at 10s)</li>
+      <li>Time 5s: Switch back to Tab A (timer should RESET to 10s)</li>
+      <li>Time 6s: Switch away from Tab A again (timer starts fresh at 10s)</li>
+      <li>Time 16s: Tab A should close (10s after last switch away)</li>
+    </ul>
+  </div>
+
+  <script>
+    async function getDebugInfo() {
+      try {
+        const response = await chrome.runtime.sendMessage({ type: 'getDebugInfo' });
+        document.getElementById('debugResult').style.display = 'block';
+        document.getElementById('debugResult').textContent = 
+          `Debug Info for Current Tab:\n${JSON.stringify(response, null, 2)}`;
+      } catch (error) {
+        document.getElementById('debugResult').style.display = 'block';
+        document.getElementById('debugResult').textContent = `Error: ${error.message}`;
+      }
+    }
+
+    async function simulateActivity() {
+      try {
+        const response = await chrome.runtime.sendMessage({ type: 'resetTimer' });
+        document.getElementById('debugResult').style.display = 'block';
+        document.getElementById('debugResult').textContent = 
+          `Timer Reset Result:\n${JSON.stringify(response, null, 2)}`;
+      } catch (error) {
+        document.getElementById('debugResult').style.display = 'block';
+        document.getElementById('debugResult').textContent = `Error: ${error.message}`;
+      }
+    }
+
+    async function getAllTabsInfo() {
+      try {
+        // Get current tab info
+        const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        
+        // Get all tabs
+        const allTabs = await chrome.tabs.query({});
+        
+        let result = `Current Tab: ${currentTab.title} (ID: ${currentTab.id})\n\n`;
+        result += `All Tabs Debug Info:\n`;
+        
+        for (const tab of allTabs) {
+          try {
+            const debugInfo = await chrome.runtime.sendMessage({ 
+              type: 'getDebugInfo', 
+              tabId: tab.id 
+            });
+            
+            const timeRemaining = Math.round(debugInfo.timeRemaining / 1000);
+            const timeSinceActivity = Math.round(debugInfo.timeSinceActivity / 1000);
+            
+            result += `\n📱 ${tab.title}:\n`;
+            result += `   ID: ${tab.id}\n`;
+            result += `   Active: ${tab.active}\n`;
+            result += `   URL: ${tab.url}\n`;
+            result += `   Last Activity: ${debugInfo.lastActivity}\n`;
+            result += `   Time Since Activity: ${timeSinceActivity}s\n`;
+            result += `   Time Remaining: ${timeRemaining}s\n`;
+            result += `   Excluded: ${debugInfo.isExcluded}\n`;
+            result += `   Status: ${tab.active ? 'ACTIVE' : debugInfo.isExcluded ? 'EXCLUDED' : 'WILL CLOSE'}\n`;
+          } catch (err) {
+            result += `\n❌ ${tab.title}: Error getting debug info\n`;
+          }
+        }
+        
+        document.getElementById('debugResult').style.display = 'block';
+        document.getElementById('debugResult').textContent = result;
+        
+      } catch (error) {
+        document.getElementById('debugResult').style.display = 'block';
+        document.getElementById('debugResult').textContent = `Error: ${error.message}`;
+      }
+    }
+
+    // Auto-refresh debug info every 2 seconds
+    setInterval(() => {
+      const debugResult = document.getElementById('debugResult');
+      if (debugResult.style.display !== 'none') {
+        getAllTabsInfo();
+      }
+    }, 2000);
+
+    window.addEventListener('load', () => {
+      if (typeof chrome !== 'undefined' && chrome.runtime) {
+        console.log('✅ Chrome extension APIs available');
+      } else {
+        alert('⚠️ This page must be loaded as part of the Chrome extension to work properly.');
+      }
+    });
+  </script>
+</body>
+</html>

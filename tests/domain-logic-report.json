@@ -1,0 +1,108 @@
+{
+  "testSuite": "Domain Logic Tests",
+  "timestamp": "2025-07-10T18:44:11.652Z",
+  "results": [
+    {
+      "url": "https://home.google.com/library",
+      "expected": true,
+      "description": "home.google.com should be excluded by *.google.com",
+      "actual": true,
+      "passed": true,
+      "timestamp": "2025-07-10T18:44:11.650Z"
+    },
+    {
+      "url": "https://app.google.com/dashboard",
+      "expected": true,
+      "description": "app.google.com should be excluded by *.google.com",
+      "actual": true,
+      "passed": true,
+      "timestamp": "2025-07-10T18:44:11.650Z"
+    },
+    {
+      "url": "https://api.google.com/v1/data",
+      "expected": true,
+      "description": "api.google.com should be excluded by *.google.com",
+      "actual": true,
+      "passed": true,
+      "timestamp": "2025-07-10T18:44:11.651Z"
+    },
+    {
+      "url": "https://test.google.com",
+      "expected": true,
+      "description": "test.google.com should be excluded by *.google.com",
+      "actual": true,
+      "passed": true,
+      "timestamp": "2025-07-10T18:44:11.651Z"
+    },
+    {
+      "url": "https://google.com",
+      "expected": false,
+      "description": "google.com should NOT be excluded by *.google.com (no subdomain)",
+      "actual": false,
+      "passed": true,
+      "timestamp": "2025-07-10T18:44:11.651Z"
+    },
+    {
+      "url": "https://example.com",
+      "expected": true,
+      "description": "example.com should be excluded by exact match",
+      "actual": true,
+      "passed": true,
+      "timestamp": "2025-07-10T18:44:11.651Z"
+    },
+    {
+      "url": "https://sub.example.com",
+      "expected": true,
+      "description": "sub.example.com should be excluded by subdomain match",
+      "actual": true,
+      "passed": true,
+      "timestamp": "2025-07-10T18:44:11.651Z"
+    },
+    {
+      "url": "https://google.com",
+      "expected": false,
+      "description": "google.com should NOT be excluded",
+      "actual": false,
+      "passed": true,
+      "timestamp": "2025-07-10T18:44:11.651Z"
+    },
+    {
+      "url": "https://notgoogle.com",
+      "expected": false,
+      "description": "notgoogle.com should NOT be excluded",
+      "actual": false,
+      "passed": true,
+      "timestamp": "2025-07-10T18:44:11.651Z"
+    },
+    {
+      "url": "https://google.com.evil.com",
+      "expected": false,
+      "description": "google.com.evil.com should NOT be excluded",
+      "actual": false,
+      "passed": true,
+      "timestamp": "2025-07-10T18:44:11.651Z"
+    },
+    {
+      "url": "http://localhost:3000",
+      "expected": true,
+      "description": "localhost:3000 should be excluded by exact match",
+      "actual": true,
+      "passed": true,
+      "timestamp": "2025-07-10T18:44:11.651Z"
+    },
+    {
+      "url": "https://sub.localhost",
+      "expected": true,
+      "description": "sub.localhost should be excluded by subdomain match",
+      "actual": true,
+      "passed": true,
+      "timestamp": "2025-07-10T18:44:11.651Z"
+    }
+  ],
+  "summary": {
+    "totalTests": 12,
+    "passedTests": 12,
+    "failedTests": 0,
+    "errorTests": 0
+  }
+}

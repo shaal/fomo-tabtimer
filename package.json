@@ -1,0 +1,20 @@
+{
+  "name": "fomo-tabtimer-tests",
+  "version": "1.0.0",
+  "description": "Test suite for FOMO TabTimer Chrome Extension",
+  "main": "test-extension.js",
+  "scripts": {
+    "test": "node test-extension.js",
+    "test-basic": "node -e \"require('./test-extension.js').testExtension()\"",
+    "test-domain": "node -e \"require('./test-extension.js').testDomainExclusion()\"",
+    "test-restore": "node -e \"require('./test-extension.js').testTabRestoration()\"",
+    "install-playwright": "npx playwright install chromium",
+    "setup": "npm install && npm run install-playwright"
+  },
+  "devDependencies": {
+    "playwright": "^1.47.0"
+  },
+  "keywords": ["chrome-extension", "testing", "playwright", "automation"],
+  "author": "Test Suite",
+  "license": "MIT"
+}

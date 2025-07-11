@@ -1,0 +1,152 @@
+{
+  "testDate": "2025-07-10T20:21:36.107Z",
+  "extensionVersion": "1.0.0",
+  "testSettings": {
+    "timeout": 10,
+    "timeUnit": "seconds",
+    "debugMode": true
+  },
+  "results": [
+    {
+      "test": "Inactive Tab Timer",
+      "observations": [
+        {
+          "timestamp": "2025-07-10T20:20:57.638Z",
+          "title": "Test Page 1",
+          "secondsElapsed": 0
+        },
+        {
+          "timestamp": "2025-07-10T20:20:58.640Z",
+          "title": "Test Page 1",
+          "secondsElapsed": 1
+        },
+        {
+          "timestamp": "2025-07-10T20:20:59.641Z",
+          "title": "Test Page 1",
+          "secondsElapsed": 2
+        },
+        {
+          "timestamp": "2025-07-10T20:21:00.643Z",
+          "title": "Test Page 1",
+          "secondsElapsed": 3
+        },
+        {
+          "timestamp": "2025-07-10T20:21:01.644Z",
+          "title": "Test Page 1",
+          "secondsElapsed": 4
+        },
+        {
+          "timestamp": "2025-07-10T20:21:02.647Z",
+          "title": "Test Page 1",
+          "secondsElapsed": 5
+        },
+        {
+          "timestamp": "2025-07-10T20:21:03.649Z",
+          "title": "Test Page 1",
+          "secondsElapsed": 6
+        },
+        {
+          "timestamp": "2025-07-10T20:21:04.652Z",
+          "title": "Test Page 1",
+          "secondsElapsed": 7
+        },
+        {
+          "timestamp": "2025-07-10T20:21:05.653Z",
+          "title": "Test Page 1",
+          "secondsElapsed": 8
+        },
+        {
+          "timestamp": "2025-07-10T20:21:06.656Z",
+          "title": "Test Page 1",
+          "secondsElapsed": 9
+        },
+        {
+          "timestamp": "2025-07-10T20:21:07.658Z",
+          "title": "Test Page 1",
+          "secondsElapsed": 10
+        },
+        {
+          "timestamp": "2025-07-10T20:21:08.660Z",
+          "title": "Test Page 1",
+          "secondsElapsed": 11
+        }
+      ],
+      "expected": "Timer should start at 10 seconds when tab becomes inactive",
+      "passed": false
+    },
+    {
+      "test": "Active Tab Timer Reset",
+      "result": "PASSED",
+      "title": "Test Page 1"
+    },
+    {
+      "test": "Timer Countdown Accuracy",
+      "readings": [
+        {
+          "elapsedSeconds": 0,
+          "title": "Test Page 1",
+          "timestamp": "2025-07-10T20:21:26.089Z"
+        },
+        {
+          "elapsedSeconds": 1.001,
+          "title": "Test Page 1",
+          "timestamp": "2025-07-10T20:21:27.090Z"
+        },
+        {
+          "elapsedSeconds": 2.004,
+          "title": "Test Page 1",
+          "timestamp": "2025-07-10T20:21:28.093Z"
+        },
+        {
+          "elapsedSeconds": 3.005,
+          "title": "Test Page 1",
+          "timestamp": "2025-07-10T20:21:29.095Z"
+        },
+        {
+          "elapsedSeconds": 4.008,
+          "title": "Test Page 1",
+          "timestamp": "2025-07-10T20:21:30.097Z"
+        },
+        {
+          "elapsedSeconds": 5.009,
+          "title": "Test Page 1",
+          "timestamp": "2025-07-10T20:21:31.098Z"
+        },
+        {
+          "elapsedSeconds": 6.01,
+          "title": "Test Page 1",
+          "timestamp": "2025-07-10T20:21:32.099Z"
+        },
+        {
+          "elapsedSeconds": 7.013,
+          "title": "Test Page 1",
+          "timestamp": "2025-07-10T20:21:33.102Z"
+        },
+        {
+          "elapsedSeconds": 8.014,
+          "title": "Test Page 1",
+          "timestamp": "2025-07-10T20:21:34.103Z"
+        },
+        {
+          "elapsedSeconds": 9.016,
+          "title": "Test Page 1",
+          "timestamp": "2025-07-10T20:21:35.106Z"
+        }
+      ],
+      "analysis": {
+        "startsAtFullTimeout": false,
+        "countsDownCorrectly": false,
+        "timerPrecision": "0/10 readings accurate",
+        "issues": [
+          "Timer does not start at full timeout",
+          "Timer countdown is not accurate"
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "totalTests": 3,
+    "passed": 1,
+    "failed": 1
+  }
+}

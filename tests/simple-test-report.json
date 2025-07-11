@@ -1,0 +1,89 @@
+{
+  "testSuite": "Simplified Wildcard Domain Exclusion Tests",
+  "timestamp": "2025-07-10T18:42:40.536Z",
+  "domainLogicResults": [
+    {
+      "url": "https://home.google.com/library",
+      "domain": "home.google.com",
+      "pattern": "*.google.com",
+      "shouldMatch": true,
+      "description": "home.google.com should match *.google.com",
+      "actualResult": true,
+      "passed": true,
+      "timestamp": "2025-07-10T18:42:18.717Z"
+    },
+    {
+      "url": "https://app.google.com/dashboard",
+      "domain": "app.google.com",
+      "pattern": "*.google.com",
+      "shouldMatch": true,
+      "description": "app.google.com should match *.google.com",
+      "actualResult": true,
+      "passed": true,
+      "timestamp": "2025-07-10T18:42:18.719Z"
+    },
+    {
+      "url": "https://google.com",
+      "domain": "google.com",
+      "pattern": "*.google.com",
+      "shouldMatch": false,
+      "description": "google.com should NOT match *.google.com (no subdomain)",
+      "actualResult": false,
+      "passed": true,
+      "timestamp": "2025-07-10T18:42:18.719Z"
+    },
+    {
+      "url": "https://test.google.com.evil.com",
+      "domain": "test.google.com.evil.com",
+      "pattern": "*.google.com",
+      "shouldMatch": false,
+      "description": "test.google.com.evil.com should NOT match *.google.com",
+      "actualResult": false,
+      "passed": true,
+      "timestamp": "2025-07-10T18:42:18.719Z"
+    },
+    {
+      "url": "https://google.com",
+      "domain": "google.com",
+      "pattern": "*.google.com",
+      "shouldMatch": false,
+      "description": "google.com should NOT match *.google.com",
+      "actualResult": false,
+      "passed": true,
+      "timestamp": "2025-07-10T18:42:18.720Z"
+    }
+  ],
+  "realPagesResults": {
+    "pages": [
+      {
+        "url": "https://example.com",
+        "title": "Example Domain",
+        "loaded": true
+      },
+      {
+        "url": "https://httpbin.org/html",
+        "title": "",
+        "loaded": true
+      },
+      {
+        "url": "https://jsonplaceholder.typicode.com/posts/1",
+        "title": "",
+        "loaded": true
+      },
+      {
+        "url": "file:///home/shaal/code/test/auto-close-chrome-extension/test-google-mock.html",
+        "title": "Mock Google Library",
+        "loaded": true
+      }
+    ],
+    "consoleLogs": []
+  },
+  "summary": {
+    "totalDomainTests": 5,
+    "passedDomainTests": 5,
+    "failedDomainTests": 0,
+    "totalConsoleLogs": 0,
+    "loadedPages": 4,
+    "failedPages": 0
+  }
+}
