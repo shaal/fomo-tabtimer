@@ -103,9 +103,14 @@ class TabsManager {
         }
       } else if (e.target.classList.contains('group-restore-btn')) {
         const date = e.target.getAttribute('data-date');
-        const windowTitle = e.target.getAttribute('data-window-title');
-        if (date && windowTitle) {
-          this.restoreWindowGroup(date, windowTitle);
+        const hour = e.target.getAttribute('data-hour');
+        const window = e.target.getAttribute('data-window');
+        const type = e.target.getAttribute('data-type');
+        
+        if (date && hour && type === 'hour') {
+          this.restoreHourGroup(date, hour);
+        } else if (date && hour && window && type === 'window') {
+          this.restoreWindowGroup(date, hour, window);
         }
       }
     });
@@ -180,7 +185,10 @@ class TabsManager {
     
     let html = '';
     Object.keys(tabsByDateAndWindow).forEach(date => {
-      const dateTabCount = Object.values(tabsByDateAndWindow[date]).reduce((sum, tabs) => sum + tabs.length, 0);
+      // Calculate total tabs for this date
+      const dateTabCount = Object.values(tabsByDateAndWindow[date])
+        .reduce((sum, hourGroup) => sum + Object.values(hourGroup).reduce((sum2, windowTabs) => sum2 + windowTabs.length, 0), 0);
+      
       html += `<div class="date-group">
         <div class="date-header">
           ${date}
@@ -189,19 +197,37 @@ class TabsManager {
           </div>
         </div>`;
       
-      Object.keys(tabsByDateAndWindow[date]).forEach(windowTitle => {
-        const windowTabCount = tabsByDateAndWindow[date][windowTitle].length;
-        html += `<div class="window-group">
-          <div class="window-header">
-            ${windowTitle}
+      // Iterate through hours for this date
+      Object.keys(tabsByDateAndWindow[date]).forEach(hourGroup => {
+        const hourTabCount = Object.values(tabsByDateAndWindow[date][hourGroup])
+          .reduce((sum, windowTabs) => sum + windowTabs.length, 0);
+        
+        html += `<div class="hour-group">
+          <div class="hour-header">
+            ${hourGroup}
             <div class="group-actions">
-              <span class="tab-count">${windowTabCount} tabs</span>
-              <button class="group-restore-btn" data-date="${date}" data-window-title="${this.escapeHtml(windowTitle)}">Restore Group</button>
+              <span class="tab-count">${hourTabCount} tabs</span>
+              <button class="group-restore-btn" data-date="${date}" data-hour="${hourGroup}" data-type="hour">Restore Hour</button>
             </div>
           </div>`;
         
-        tabsByDateAndWindow[date][windowTitle].forEach(tab => {
-          html += this.createTabItemHTML(tab);
+        // Iterate through windows for this hour
+        Object.keys(tabsByDateAndWindow[date][hourGroup]).forEach(windowKey => {
+          const windowTabCount = tabsByDateAndWindow[date][hourGroup][windowKey].length;
+          html += `<div class="window-group">
+            <div class="window-header">
+              ${windowKey}
+              <div class="group-actions">
+                <span class="tab-count">${windowTabCount} tabs</span>
+                <button class="group-restore-btn" data-date="${date}" data-hour="${hourGroup}" data-window="${this.escapeHtml(windowKey)}" data-type="window">Restore Window</button>
+              </div>
+            </div>`;
+          
+          tabsByDateAndWindow[date][hourGroup][windowKey].forEach(tab => {
+            html += this.createTabItemHTML(tab);
+          });
+          
+          html += '</div>';
         });
         
         html += '</div>';
@@ -218,17 +244,31 @@ class TabsManager {
     const grouped = {};
     tabs.forEach(tab => {
       const date = tab.date || new Date(tab.closedAt).toDateString();
-      const windowTitle = tab.windowTitle || 'Unknown Window';
+      const windowId = tab.windowId || 'unknown';
+      const hourGroup = tab.hourGroup || this.getHourGroupFromClosedAt(tab.closedAt);
+      const windowKey = `Window ${windowId}`;
       
+      // Create hierarchy: Date → Hour → Window
       if (!grouped[date]) {
         grouped[date] = {};
       }
-      if (!grouped[date][windowTitle]) {
-        grouped[date][windowTitle] = [];
+      if (!grouped[date][hourGroup]) {
+        grouped[date][hourGroup] = {};
       }
-      grouped[date][windowTitle].push(tab);
+      if (!grouped[date][hourGroup][windowKey]) {
+        grouped[date][hourGroup][windowKey] = [];
+      }
+      grouped[date][hourGroup][windowKey].push(tab);
     });
     return grouped;
+  }
+
+  getHourGroupFromClosedAt(closedAt) {
+    const date = new Date(closedAt);
+    const hour = date.getHours();
+    const startHour = hour.toString().padStart(2, '0') + ':00';
+    const endHour = ((hour + 1) % 24).toString().padStart(2, '0') + ':00';
+    return `${startHour}-${endHour}`;
   }
 
   createTabItemHTML(tab) {
@@ -436,13 +476,40 @@ class TabsManager {
     setTimeout(() => notification.remove(), 3000);
   }
 
-  async restoreWindowGroup(date, windowTitle) {
-    this.debugLog('restoreWindowGroup called with:', { date, windowTitle });
+  async restoreHourGroup(date, hour) {
+    this.debugLog('restoreHourGroup called with:', { date, hour });
     
-    const windowTabs = this.filteredTabs.filter(tab => 
-      (tab.date || new Date(tab.closedAt).toDateString()) === date && 
-      (tab.windowTitle || 'Unknown Window') === windowTitle
-    );
+    const hourTabs = this.filteredTabs.filter(tab => {
+      const tabDate = tab.date || new Date(tab.closedAt).toDateString();
+      const hourGroup = tab.hourGroup || this.getHourGroupFromClosedAt(tab.closedAt);
+      
+      return tabDate === date && hourGroup === hour;
+    });
+    
+    this.debugLog('Found matching tabs:', hourTabs.length, hourTabs);
+    
+    if (hourTabs.length === 0) {
+      this.showNotification('No tabs found to restore', 'error');
+      return;
+    }
+    
+    const confirmed = confirm(`Are you sure you want to restore ${hourTabs.length} tabs from "${hour}"?`);
+    if (!confirmed) return;
+    
+    await this.restoreTabs(hourTabs, `hour group "${hour}"`);
+  }
+
+  async restoreWindowGroup(date, hour, windowKey) {
+    this.debugLog('restoreWindowGroup called with:', { date, hour, windowKey });
+    
+    const windowTabs = this.filteredTabs.filter(tab => {
+      const tabDate = tab.date || new Date(tab.closedAt).toDateString();
+      const windowId = tab.windowId || 'unknown';
+      const hourGroup = tab.hourGroup || this.getHourGroupFromClosedAt(tab.closedAt);
+      const tabWindowKey = `Window ${windowId}`;
+      
+      return tabDate === date && hourGroup === hour && tabWindowKey === windowKey;
+    });
     
     this.debugLog('Found matching tabs:', windowTabs.length, windowTabs);
     
@@ -451,9 +518,13 @@ class TabsManager {
       return;
     }
     
-    const confirmed = confirm(`Are you sure you want to restore ${windowTabs.length} tabs from "${windowTitle}"?`);
+    const confirmed = confirm(`Are you sure you want to restore ${windowTabs.length} tabs from "${windowKey}"?`);
     if (!confirmed) return;
     
+    await this.restoreTabs(windowTabs, `window "${windowKey}"`);
+  }
+
+  async restoreTabs(tabsToRestore, groupName) {
     try {
       // Get current saved tabs from storage
       const { savedTabs = [] } = await chrome.storage.local.get(['savedTabs']);
@@ -461,7 +532,7 @@ class TabsManager {
       
       // Create all tabs first
       const createdTabs = [];
-      for (const tab of windowTabs) {
+      for (const tab of tabsToRestore) {
         this.debugLog('Creating tab with URL:', tab.url);
         const newTab = await chrome.tabs.create({ url: tab.url });
         createdTabs.push(newTab);
@@ -469,7 +540,7 @@ class TabsManager {
       }
       
       // Then remove all the restored tabs from storage in one operation
-      const tabIdsToRemove = windowTabs.map(tab => String(tab.id));
+      const tabIdsToRemove = tabsToRestore.map(tab => String(tab.id));
       this.debugLog('Tab IDs to remove:', tabIdsToRemove);
       
       const remainingTabs = savedTabs.filter(t => !tabIdsToRemove.includes(String(t.id)));
@@ -479,11 +550,11 @@ class TabsManager {
       this.debugLog('Storage updated successfully');
       
       await this.loadTabs();
-      this.showNotification(`${windowTabs.length} tabs restored successfully`, 'success');
+      this.showNotification(`${tabsToRestore.length} tabs restored successfully from ${groupName}`, 'success');
     } catch (error) {
-      console.error('Failed to restore window group:', error);
+      console.error(`Failed to restore ${groupName}:`, error);
       this.debugLog('Error details:', error);
-      this.showNotification('Failed to restore some tabs: ' + error.message, 'error');
+      this.showNotification(`Failed to restore some tabs from ${groupName}: ` + error.message, 'error');
     }
   }
 

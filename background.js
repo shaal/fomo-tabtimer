@@ -601,19 +601,71 @@ class AutoCloseManager {
       .replace(/^\[EXCLUDED\] /, '');
   }
 
+  getHourGroup(date) {
+    const hour = date.getHours();
+    const startHour = hour.toString().padStart(2, '0') + ':00';
+    const endHour = ((hour + 1) % 24).toString().padStart(2, '0') + ':00';
+    return `${startHour}-${endHour}`;
+  }
+
+  isNewTab(url) {
+    if (!url) return false;
+    
+    const newTabUrls = [
+      'chrome://newtab/',
+      'chrome://new-tab-page/',
+      'chrome-search://local-ntp/local-ntp.html',
+      'edge://newtab/',
+      'about:newtab',
+      'about:blank'
+    ];
+    
+    // Check exact matches
+    if (newTabUrls.includes(url)) {
+      return true;
+    }
+    
+    // Check if URL starts with new tab patterns
+    const newTabPrefixes = [
+      'chrome://newtab',
+      'chrome://new-tab-page',
+      'chrome-search://local-ntp',
+      'edge://newtab'
+    ];
+    
+    return newTabPrefixes.some(prefix => url.startsWith(prefix));
+  }
+
   async closeAndSaveTab(tab) {
     try {
       this.debugLog(`Starting to close and save tab: ${tab.title} (ID: ${tab.id})`);
       
+      // Check if this is a new tab that shouldn't be saved
+      if (this.isNewTab(tab.url)) {
+        this.debugLog(`Tab is a new tab (${tab.url}), closing without saving`);
+        await chrome.tabs.remove(tab.id);
+        this.debugLog(`New tab ${tab.id} removed successfully without saving`);
+        
+        this.tabActivity.delete(tab.id);
+        
+        // Persist the updated activity to storage
+        this.saveTabActivity().catch(err => {
+          console.error('❌ Failed to save tab activity after tab removal:', err);
+        });
+        return;
+      }
+      
       const now = new Date();
       const cleanTitle = this.cleanTitleForSaving(tab.title);
+      const hourGroup = this.getHourGroup(now);
       const savedTab = {
         id: `tab_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
         url: tab.url,
         title: cleanTitle,
         favicon: tab.favIconUrl,
         windowId: tab.windowId,
-        windowTitle: `Closed at ${now.toLocaleTimeString()} on ${now.toLocaleDateString()}`,
+        windowTitle: `Window ${tab.windowId}`,
+        hourGroup: hourGroup,
         closedAt: now.toISOString(),
         date: now.toDateString()
       };
