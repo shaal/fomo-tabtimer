@@ -50,9 +50,6 @@ class TabsManager {
       this.applyFilters();
     });
 
-    document.getElementById('restoreAllBtn').addEventListener('click', () => {
-      this.restoreAllTabs();
-    });
 
     document.getElementById('clearAllBtn').addEventListener('click', () => {
       this.clearAllTabs();
@@ -103,6 +100,12 @@ class TabsManager {
         const tabId = e.target.getAttribute('data-tab-id');
         if (tabId) {
           this.deleteTab(tabId);
+        }
+      } else if (e.target.classList.contains('group-restore-btn')) {
+        const date = e.target.getAttribute('data-date');
+        const windowTitle = e.target.getAttribute('data-window-title');
+        if (date && windowTitle) {
+          this.restoreWindowGroup(date, windowTitle);
         }
       }
     });
@@ -183,7 +186,6 @@ class TabsManager {
           ${date}
           <div class="group-actions">
             <span class="tab-count">${dateTabCount} tabs</span>
-            <button class="group-restore-btn" onclick="tabsManager.restoreDateGroup('${date}')">Restore All</button>
           </div>
         </div>`;
       
@@ -194,7 +196,7 @@ class TabsManager {
             ${windowTitle}
             <div class="group-actions">
               <span class="tab-count">${windowTabCount} tabs</span>
-              <button class="group-restore-btn" onclick="tabsManager.restoreWindowGroup('${date}', '${windowTitle.replace(/'/g, "\\'")}')">Restore Group</button>
+              <button class="group-restore-btn" data-date="${date}" data-window-title="${this.escapeHtml(windowTitle)}">Restore Group</button>
             </div>
           </div>`;
         
@@ -363,29 +365,6 @@ class TabsManager {
     await this.loadTabs();
   }
 
-  async restoreAllTabs() {
-    if (this.filteredTabs.length === 0) return;
-    
-    const confirmed = confirm(`Are you sure you want to restore ${this.filteredTabs.length} tabs?`);
-    if (!confirmed) return;
-    
-    const button = document.getElementById('restoreAllBtn');
-    button.disabled = true;
-    button.textContent = 'Restoring...';
-    
-    try {
-      for (const tab of this.filteredTabs) {
-        await chrome.tabs.create({ url: tab.url });
-        await this.deleteTab(tab.id);
-      }
-    } catch (error) {
-      console.error('Failed to restore tabs:', error);
-      alert('Some tabs failed to restore. Check the console for details.');
-    } finally {
-      button.disabled = false;
-      button.textContent = 'Restore All';
-    }
-  }
 
   async clearAllTabs() {
     if (this.allTabs.length === 0) return;
@@ -458,61 +437,56 @@ class TabsManager {
   }
 
   async restoreWindowGroup(date, windowTitle) {
+    this.debugLog('restoreWindowGroup called with:', { date, windowTitle });
+    
     const windowTabs = this.filteredTabs.filter(tab => 
       (tab.date || new Date(tab.closedAt).toDateString()) === date && 
       (tab.windowTitle || 'Unknown Window') === windowTitle
     );
     
-    if (windowTabs.length === 0) return;
+    this.debugLog('Found matching tabs:', windowTabs.length, windowTabs);
+    
+    if (windowTabs.length === 0) {
+      this.showNotification('No tabs found to restore', 'error');
+      return;
+    }
     
     const confirmed = confirm(`Are you sure you want to restore ${windowTabs.length} tabs from "${windowTitle}"?`);
     if (!confirmed) return;
     
     try {
+      // Get current saved tabs from storage
+      const { savedTabs = [] } = await chrome.storage.local.get(['savedTabs']);
+      this.debugLog('Current saved tabs count:', savedTabs.length);
+      
+      // Create all tabs first
+      const createdTabs = [];
       for (const tab of windowTabs) {
-        await chrome.tabs.create({ url: tab.url });
-        
-        // Remove from storage
-        const { savedTabs = [] } = await chrome.storage.local.get(['savedTabs']);
-        const filteredTabs = savedTabs.filter(t => String(t.id) !== String(tab.id));
-        await chrome.storage.local.set({ savedTabs: filteredTabs });
+        this.debugLog('Creating tab with URL:', tab.url);
+        const newTab = await chrome.tabs.create({ url: tab.url });
+        createdTabs.push(newTab);
+        this.debugLog('Created tab:', newTab.id);
       }
+      
+      // Then remove all the restored tabs from storage in one operation
+      const tabIdsToRemove = windowTabs.map(tab => String(tab.id));
+      this.debugLog('Tab IDs to remove:', tabIdsToRemove);
+      
+      const remainingTabs = savedTabs.filter(t => !tabIdsToRemove.includes(String(t.id)));
+      this.debugLog('Remaining tabs after filter:', remainingTabs.length);
+      
+      await chrome.storage.local.set({ savedTabs: remainingTabs });
+      this.debugLog('Storage updated successfully');
       
       await this.loadTabs();
       this.showNotification(`${windowTabs.length} tabs restored successfully`, 'success');
     } catch (error) {
       console.error('Failed to restore window group:', error);
+      this.debugLog('Error details:', error);
       this.showNotification('Failed to restore some tabs: ' + error.message, 'error');
     }
   }
 
-  async restoreDateGroup(date) {
-    const dateTabs = this.filteredTabs.filter(tab => 
-      (tab.date || new Date(tab.closedAt).toDateString()) === date
-    );
-    
-    if (dateTabs.length === 0) return;
-    
-    const confirmed = confirm(`Are you sure you want to restore all ${dateTabs.length} tabs from ${date}?`);
-    if (!confirmed) return;
-    
-    try {
-      for (const tab of dateTabs) {
-        await chrome.tabs.create({ url: tab.url });
-        
-        // Remove from storage
-        const { savedTabs = [] } = await chrome.storage.local.get(['savedTabs']);
-        const filteredTabs = savedTabs.filter(t => String(t.id) !== String(tab.id));
-        await chrome.storage.local.set({ savedTabs: filteredTabs });
-      }
-      
-      await this.loadTabs();
-      this.showNotification(`${dateTabs.length} tabs restored successfully`, 'success');
-    } catch (error) {
-      console.error('Failed to restore date group:', error);
-      this.showNotification('Failed to restore some tabs: ' + error.message, 'error');
-    }
-  }
 }
 
 const tabsManager = new TabsManager();
