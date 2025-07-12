@@ -1,6 +1,7 @@
 class AutoCloseManager {
   constructor() {
     this.tabActivity = new Map();
+    this.pausedTime = null; // Track when auto-close was paused
     this.shortTimeoutInterval = null;
     this.memoryUsage = {
       lastCheck: Date.now(),
@@ -63,15 +64,29 @@ class AutoCloseManager {
 
   async loadTabActivity() {
     this.debugLog('Loading tab activity from storage...');
-    const stored = await chrome.storage.local.get(['tabActivity']);
+    const stored = await chrome.storage.local.get(['tabActivity', 'pausedTime']);
     
     if (stored.tabActivity) {
       // Convert stored object back to Map
       this.tabActivity = new Map(Object.entries(stored.tabActivity));
       this.debugLog(`Loaded activity for ${this.tabActivity.size} tabs from storage`);
       
-      // Check for tabs that should have been closed during downtime
-      await this.checkForExpiredTabs();
+      // Load pause time if it exists
+      if (stored.pausedTime) {
+        this.pausedTime = stored.pausedTime;
+        this.debugLog(`Loaded pause time: ${new Date(this.pausedTime).toLocaleTimeString()}`);
+        
+        // If we were paused and auto-close is now enabled, resume timers
+        if (this.settings.enabled) {
+          this.debugLog('Auto-close is enabled but timers were paused, resuming...');
+          await this.resumeAllTabTimers();
+        }
+      }
+      
+      // Check for tabs that should have been closed during downtime (only if not paused)
+      if (!this.pausedTime) {
+        await this.checkForExpiredTabs();
+      }
     } else {
       this.debugLog('No stored tab activity found');
     }
@@ -142,10 +157,25 @@ class AutoCloseManager {
 
     chrome.storage.onChanged.addListener((changes, namespace) => {
       if (namespace === 'sync' && changes.autoCloseSettings) {
+        const oldSettings = { ...this.settings };
         const oldDebugMode = this.settings.debugMode;
         this.settings = { ...this.settings, ...changes.autoCloseSettings.newValue };
         
-        // Restart the periodic check with new timing
+        // Check if auto-close was just enabled/disabled
+        const wasEnabled = oldSettings.enabled;
+        const isNowEnabled = this.settings.enabled;
+        
+        if (wasEnabled !== isNowEnabled) {
+          if (isNowEnabled) {
+            this.debugLog('Auto-close re-enabled - resuming paused timers');
+            this.resumeAllTabTimers();
+          } else {
+            this.debugLog('Auto-close disabled - pausing all timers');
+            this.pauseAllTabTimers();
+          }
+        }
+        
+        // Restart the periodic check with new timing (this will stop timers if disabled)
         this.startPeriodicCheck();
         
         // Handle debug mode changes
@@ -219,6 +249,12 @@ class AutoCloseManager {
   }
 
   resetTabTimer(tabId) {
+    // Don't reset timers when auto-close is disabled (paused state)
+    if (!this.settings.enabled) {
+      this.debugLog(`Timer reset skipped for tab ${tabId} - auto-close is disabled`);
+      return;
+    }
+    
     const now = Date.now();
     const previous = this.tabActivity.get(tabId);
     
@@ -257,6 +293,49 @@ class AutoCloseManager {
     }
   }
 
+  async pauseAllTabTimers() {
+    this.debugLog('Pausing all tab timers...');
+    
+    try {
+      // Record when we paused
+      this.pausedTime = Date.now();
+      this.debugLog(`Timers paused at: ${new Date(this.pausedTime).toLocaleTimeString()}`);
+      
+      // Save pause time to storage
+      await chrome.storage.local.set({ pausedTime: this.pausedTime });
+      
+    } catch (error) {
+      console.error('❌ Error pausing all tab timers:', error);
+    }
+  }
+
+  async resumeAllTabTimers() {
+    this.debugLog('Resuming all tab timers with fresh timeout...');
+    
+    try {
+      const now = Date.now();
+      let resetCount = 0;
+      
+      // Reset all tab timers to current time (fresh start)
+      for (const [tabId] of this.tabActivity.entries()) {
+        this.tabActivity.set(tabId, now);
+        resetCount++;
+      }
+      
+      this.debugLog(`Reset ${resetCount} tabs to fresh timeout`);
+      
+      // Clear pause time
+      this.pausedTime = null;
+      await chrome.storage.local.remove(['pausedTime']);
+      
+      // Persist the updated activity to storage
+      await this.saveTabActivity();
+      
+    } catch (error) {
+      console.error('❌ Error resuming all tab timers:', error);
+    }
+  }
+
   updateTabActivity(tabId) {
     // This method is now just an alias for resetTabTimer to maintain compatibility
     this.resetTabTimer(tabId);
@@ -268,6 +347,12 @@ class AutoCloseManager {
     if (this.shortTimeoutInterval) {
       clearInterval(this.shortTimeoutInterval);
       this.shortTimeoutInterval = null;
+    }
+    
+    // If auto-close is disabled, don't start any timers
+    if (!this.settings.enabled) {
+      this.debugLog('Auto-close disabled, stopping all timers');
+      return;
     }
     
     // Set check frequency based on timeout setting
@@ -496,17 +581,28 @@ class AutoCloseManager {
       isExcluded = this.isExcludedDomain(tab.url);
     }
     
-    // Calculate time remaining - key fix: only countdown when tab is INACTIVE
+    // Calculate time remaining
     let timeRemaining;
+    let timeSinceActivity = 0;
     const isActive = tab ? tab.active : false;
     
-    if (isActive) {
+    // If auto-close is disabled, show paused state
+    if (!this.settings.enabled) {
+      if (this.pausedTime && lastActivity) {
+        // Show time remaining at the moment it was paused
+        timeSinceActivity = this.pausedTime - lastActivity;
+        timeRemaining = Math.max(0, timeoutMs - timeSinceActivity);
+      } else {
+        timeRemaining = timeoutMs;
+      }
+      this.debugLog(`Tab ${tabId} is PAUSED - showing paused state`);
+    } else if (isActive) {
       // Tab is active - timer should show full timeout
       timeRemaining = timeoutMs;
       this.debugLog(`Tab ${tabId} is ACTIVE - showing full timeout: ${Math.round(timeRemaining/1000)}s`);
     } else {
       // Tab is inactive - show countdown
-      const timeSinceActivity = lastActivity ? now - lastActivity : 0;
+      timeSinceActivity = lastActivity ? now - lastActivity : 0;
       timeRemaining = lastActivity ? Math.max(0, timeoutMs - timeSinceActivity) : timeoutMs;
       this.debugLog(`Tab ${tabId} is INACTIVE - time since activity: ${Math.round(timeSinceActivity/1000)}s, remaining: ${Math.round(timeRemaining/1000)}s`);
     }
@@ -514,12 +610,13 @@ class AutoCloseManager {
     const debugInfo = {
       tabId,
       lastActivity: lastActivity ? new Date(lastActivity).toLocaleTimeString() : 'Never',
-      timeSinceActivity: lastActivity ? now - lastActivity : 0,
+      timeSinceActivity,
       timeoutMs,
       timeRemaining,
       isExcluded,
       isPinned: tab ? tab.pinned : false,
       isActive,
+      isPaused: !this.settings.enabled,
       url: tab ? tab.url : 'unknown',
       title: tab ? tab.title : 'unknown',
       settings: this.settings,
