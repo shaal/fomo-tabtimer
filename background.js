@@ -15,7 +15,7 @@ class AutoCloseManager {
       excludedDomains: [],
       excludePinned: true,
       debugMode: false,
-      timerPersistenceMode: 'absolute' // 'absolute' or 'continue'
+      timerPersistenceMode: 'continue' // Always use 'continue' mode
     };
     this.init();
   }
@@ -78,13 +78,12 @@ class AutoCloseManager {
   }
 
   async checkForExpiredTabs() {
-    this.debugLog(`Checking for tabs that expired during downtime (mode: ${this.settings.timerPersistenceMode})...`);
+    this.debugLog('Checking for tabs that expired during downtime (give fresh timers mode)...');
     
     const tabs = await chrome.tabs.query({});
     const now = Date.now();
     const timeoutMs = this.getTimeoutInMs();
     
-    let expiredCount = 0;
     let continuedCount = 0;
     
     for (const tab of tabs) {
@@ -93,28 +92,16 @@ class AutoCloseManager {
       if (lastActivity) {
         const timeSinceActivity = now - lastActivity;
         
-        if (this.settings.timerPersistenceMode === 'absolute') {
-          // Absolute mode: Close tabs that should have been closed during downtime
-          const shouldSkipPinned = tab.pinned && this.settings.excludePinned;
-          if (timeSinceActivity > timeoutMs && !tab.active && !shouldSkipPinned && !this.isExcludedDomain(tab.url)) {
-            this.debugLog(`Closing expired tab: ${tab.title} (inactive for ${Math.round(timeSinceActivity/1000)}s)`);
-            await this.closeAndSaveTab(tab);
-            expiredCount++;
-          }
-        } else if (this.settings.timerPersistenceMode === 'continue') {
-          // Continue mode: Reset timers to continue from where they left off
-          if (timeSinceActivity > timeoutMs) {
-            this.debugLog(`Continuing timer for tab: ${tab.title} (was inactive for ${Math.round(timeSinceActivity/1000)}s, resetting to fresh timeout)`);
-            this.resetTabTimer(tab.id);
-            continuedCount++;
-          }
+        // Give fresh timers: Reset timers to continue from where they left off
+        if (timeSinceActivity > timeoutMs) {
+          this.debugLog(`Continuing timer for tab: ${tab.title} (was inactive for ${Math.round(timeSinceActivity/1000)}s, resetting to fresh timeout)`);
+          this.resetTabTimer(tab.id);
+          continuedCount++;
         }
       }
     }
     
-    if (this.settings.timerPersistenceMode === 'absolute' && expiredCount > 0) {
-      this.debugLog(`Closed ${expiredCount} tabs that expired during downtime`);
-    } else if (this.settings.timerPersistenceMode === 'continue' && continuedCount > 0) {
+    if (continuedCount > 0) {
       this.debugLog(`Continued ${continuedCount} timers from where they left off`);
     } else {
       this.debugLog('No timer adjustments needed');
