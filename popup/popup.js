@@ -35,21 +35,30 @@ class PopupManager {
   setupEventListeners() {
     document.getElementById('enableToggle').addEventListener('change', (e) => {
       this.settings.enabled = e.target.checked;
+      this.updateStatusIndicator();
       this.updateSettingsVisibility();
+      this.saveSettings();
+    });
+
+    document.getElementById('advancedToggle').addEventListener('click', () => {
+      this.toggleAdvancedSettings();
     });
 
     document.getElementById('timeValue').addEventListener('input', (e) => {
       this.settings.timeValue = parseInt(e.target.value) || 1;
+      this.saveSettings();
     });
 
     document.getElementById('timeUnit').addEventListener('change', (e) => {
       this.settings.timeUnit = e.target.value;
+      this.saveSettings();
     });
 
     document.querySelectorAll('input[name="timerPersistence"]').forEach(radio => {
       radio.addEventListener('change', (e) => {
         if (e.target.checked) {
           this.settings.timerPersistenceMode = e.target.value;
+          this.saveSettings();
         }
       });
     });
@@ -57,6 +66,7 @@ class PopupManager {
     document.getElementById('debugToggle').addEventListener('change', (e) => {
       this.settings.debugMode = e.target.checked;
       this.updateDebugVisibility();
+      this.saveSettings();
     });
 
     document.getElementById('addDomain').addEventListener('click', () => {
@@ -69,9 +79,6 @@ class PopupManager {
       }
     });
 
-    document.getElementById('saveSettings').addEventListener('click', () => {
-      this.saveSettings();
-    });
 
     document.getElementById('viewTabsBtn').addEventListener('click', () => {
       this.openTabsPage();
@@ -103,15 +110,22 @@ class PopupManager {
     }
     
     document.getElementById('debugToggle').checked = this.settings.debugMode || false;
+    this.updateStatusIndicator();
     this.updateSettingsVisibility();
     this.updateDebugVisibility();
     this.renderDomainList();
   }
 
   updateSettingsVisibility() {
-    const settingsSection = document.getElementById('settingsSection');
-    settingsSection.style.opacity = this.settings.enabled ? '1' : '0.5';
-    settingsSection.style.pointerEvents = this.settings.enabled ? 'auto' : 'none';
+    const mainControls = document.querySelector('.main-controls');
+    const timerSetting = document.querySelector('.timer-setting');
+    const opacity = this.settings.enabled ? '1' : '0.5';
+    const pointerEvents = this.settings.enabled ? 'auto' : 'none';
+    
+    if (timerSetting) {
+      timerSetting.style.opacity = opacity;
+      timerSetting.style.pointerEvents = pointerEvents;
+    }
   }
 
   renderDomainList() {
@@ -137,32 +151,49 @@ class PopupManager {
       this.settings.excludedDomains.push(domain);
       input.value = '';
       this.renderDomainList();
+      this.saveSettings();
     }
   }
 
   removeDomain(index) {
     this.settings.excludedDomains.splice(index, 1);
     this.renderDomainList();
+    this.saveSettings();
   }
 
   async saveSettings() {
     await chrome.storage.sync.set({ autoCloseSettings: this.settings });
-    
-    const button = document.getElementById('saveSettings');
-    const originalText = button.textContent;
-    button.textContent = 'Saved!';
-    button.style.background = '#4CAF50';
-    
-    setTimeout(() => {
-      button.textContent = originalText;
-      button.style.background = '';
-    }, 1000);
   }
 
   async updateTabsCount() {
     const { savedTabs = [] } = await chrome.storage.local.get(['savedTabs']);
     const count = savedTabs.length;
-    document.getElementById('tabsCount').textContent = `${count} tab${count !== 1 ? 's' : ''} saved`;
+    document.getElementById('tabsCount').textContent = `${count} tab${count !== 1 ? 's' : ''}`;
+  }
+
+  updateStatusIndicator() {
+    const indicator = document.getElementById('statusIndicator');
+    if (this.settings.enabled) {
+      indicator.textContent = 'ON';
+      indicator.classList.add('on');
+    } else {
+      indicator.textContent = 'OFF';
+      indicator.classList.remove('on');
+    }
+  }
+
+  toggleAdvancedSettings() {
+    const advancedSettings = document.getElementById('advancedSettings');
+    const advancedToggle = document.getElementById('advancedToggle');
+    const isVisible = advancedSettings.style.display !== 'none';
+    
+    if (isVisible) {
+      advancedSettings.style.display = 'none';
+      advancedToggle.classList.remove('expanded');
+    } else {
+      advancedSettings.style.display = 'block';
+      advancedToggle.classList.add('expanded');
+    }
   }
 
   updateDebugVisibility() {

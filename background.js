@@ -33,6 +33,7 @@ class AutoCloseManager {
       await this.loadSettings();
       await this.loadTabActivity();
       this.setupEventListeners();
+      await this.initializeExistingTabs();
       this.startPeriodicCheck();
       
       this.debugLog('Background script initialized successfully');
@@ -202,6 +203,32 @@ class AutoCloseManager {
         sendResponse({ error: 'Unknown message type' });
       }
     });
+  }
+
+  async initializeExistingTabs() {
+    this.debugLog('Initializing timers for all existing tabs...');
+    
+    try {
+      const tabs = await chrome.tabs.query({});
+      const now = Date.now();
+      let initializedCount = 0;
+      
+      for (const tab of tabs) {
+        // Only initialize if tab doesn't already have a timer
+        if (!this.tabActivity.has(tab.id)) {
+          this.tabActivity.set(tab.id, now);
+          initializedCount++;
+        }
+      }
+      
+      this.debugLog(`Initialized timers for ${initializedCount} existing tabs`);
+      
+      // Persist the updated activity to storage
+      await this.saveTabActivity();
+      
+    } catch (error) {
+      console.error('❌ Error initializing existing tabs:', error);
+    }
   }
 
   resetTabTimer(tabId) {
@@ -577,15 +604,26 @@ class AutoCloseManager {
     }
   }
 
+  cleanTitleForSaving(title) {
+    // Strip debug information from title before saving
+    return title
+      .replace(/^🔥 CLOSING - /, '')
+      .replace(/^🔥 \d+:\d+ - /, '')
+      .replace(/^⚠️ \d+:\d+ - /, '')
+      .replace(/^⏰ \d+:\d+ - /, '')
+      .replace(/^\[EXCLUDED\] /, '');
+  }
+
   async closeAndSaveTab(tab) {
     try {
       this.debugLog(`Starting to close and save tab: ${tab.title} (ID: ${tab.id})`);
       
       const now = new Date();
+      const cleanTitle = this.cleanTitleForSaving(tab.title);
       const savedTab = {
         id: `tab_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
         url: tab.url,
-        title: tab.title,
+        title: cleanTitle,
         favicon: tab.favIconUrl,
         windowId: tab.windowId,
         windowTitle: `Closed at ${now.toLocaleTimeString()} on ${now.toLocaleDateString()}`,

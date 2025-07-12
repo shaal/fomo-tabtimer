@@ -7,103 +7,111 @@
 </head>
 <body>
   <div class="container">
-    <h1>FOMO TabTimer</h1>
+    <div class="header">
+      <h1>FOMO TabTimer</h1>
+      <span id="statusIndicator" class="status-indicator">OFF</span>
+    </div>
     
-    <div class="section">
+    <div class="main-controls">
       <label class="toggle-container">
         <input type="checkbox" id="enableToggle">
         <span class="slider"></span>
-        <span class="label">Enable FOMO TabTimer</span>
+        <span class="label">Auto-close tabs</span>
       </label>
-    </div>
-
-    <div class="section" id="settingsSection">
-      <h3>Close tabs after:</h3>
-      <div class="time-input">
-        <input type="number" id="timeValue" min="1" max="999" value="30">
-        <select id="timeUnit">
-          <option value="seconds">Seconds</option>
-          <option value="minutes">Minutes</option>
-          <option value="hours">Hours</option>
-          <option value="days">Days</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="section">
-      <h3>After Browser Restart</h3>
-      <div class="timer-persistence-input">
-        <label class="radio-option">
-          <input type="radio" name="timerPersistence" value="absolute" id="timerAbsolute">
-          <span>Close expired tabs</span>
-        </label>
-        <label class="radio-option">
-          <input type="radio" name="timerPersistence" value="continue" id="timerContinue">
-          <span>Give fresh timers</span>
-        </label>
-      </div>
-    </div>
-
-    <div class="section">
-      <h3>Excluded Domains</h3>
-      <div class="domain-input">
-        <input type="text" id="domainInput" placeholder="e.g., google.com or *.github.com">
-        <button id="addDomain">Add</button>
-      </div>
-      <div id="domainList" class="domain-list"></div>
-    </div>
-
-    <div class="section">
-      <label class="toggle-container">
-        <input type="checkbox" id="debugToggle">
-        <span class="slider"></span>
-        <span class="label">Debug Mode</span>
-      </label>
-      <p class="debug-description">Shows countdown timers on tabs and memory usage</p>
-    </div>
-
-    <div class="section">
-      <button id="saveSettings" class="btn-primary">Save Settings</button>
-    </div>
-
-    <div class="section debug-info" id="debugInfo" style="display:none;">
-      <h3>🐛 Debug Information</h3>
-      <div class="debug-stats">
-        <div class="stat-row">
-          <span class="stat-label">Extension Uptime:</span>
-          <span class="stat-value" id="debugUptime">--</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Tracked Tabs:</span>
-          <span class="stat-value" id="debugTrackedTabs">--</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Excluded Domains:</span>
-          <span class="stat-value" id="debugExcludedDomains">--</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Check Count:</span>
-          <span class="stat-value" id="debugCheckCount">--</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Last Check:</span>
-          <span class="stat-value" id="debugLastCheck">--</span>
+      
+      <div class="timer-setting">
+        <label class="timer-label">Close tabs after:</label>
+        <div class="time-input">
+          <input type="number" id="timeValue" min="1" max="999" value="30">
+          <select id="timeUnit">
+            <option value="seconds">seconds</option>
+            <option value="minutes">minutes</option>
+            <option value="hours">hours</option>
+            <option value="days">days</option>
+          </select>
         </div>
       </div>
-      <div class="debug-actions">
-        <button id="refreshDebugInfo" class="btn-secondary">Refresh Info</button>
-        <button id="openDebugConsole" class="btn-secondary">Open Console</button>
-        <button id="openDebugDashboard" class="btn-secondary">Dashboard</button>
-      </div>
     </div>
 
-    <div class="section">
+    <div class="closed-tabs-section">
       <div class="tabs-header">
         <h3>Closed Tabs</h3>
-        <span id="tabsCount" class="tabs-count">0 tabs saved</span>
+        <span id="tabsCount" class="tabs-count">0 tabs</span>
       </div>
       <button id="viewTabsBtn" class="btn-view-tabs">📂 View All Closed Tabs</button>
-      <p class="tabs-description">Open the full tabs manager to view, search, and restore your closed tabs</p>
+    </div>
+
+    <div class="advanced-toggle-section">
+      <button id="advancedToggle" class="advanced-toggle">
+        <span>⚙️ Advanced Settings</span>
+        <span class="arrow">▼</span>
+      </button>
+    </div>
+
+    <div class="advanced-settings" id="advancedSettings" style="display: none;">
+      <div class="advanced-section">
+        <h3>After Browser Restart</h3>
+        <div class="timer-persistence-input">
+          <label class="radio-option">
+            <input type="radio" name="timerPersistence" value="absolute" id="timerAbsolute">
+            <span>Close expired tabs</span>
+          </label>
+          <label class="radio-option">
+            <input type="radio" name="timerPersistence" value="continue" id="timerContinue">
+            <span>Give fresh timers</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="advanced-section">
+        <h3>Excluded Domains</h3>
+        <div class="domain-input">
+          <input type="text" id="domainInput" placeholder="e.g., google.com or *.github.com">
+          <button id="addDomain">Add</button>
+        </div>
+        <div id="domainList" class="domain-list"></div>
+      </div>
+
+      <div class="advanced-section">
+        <label class="toggle-container">
+          <input type="checkbox" id="debugToggle">
+          <span class="slider"></span>
+          <span class="label">Debug Mode</span>
+        </label>
+        <p class="debug-description">Shows countdown timers on tabs and memory usage</p>
+      </div>
+
+      <div class="advanced-section debug-info" id="debugInfo" style="display:none;">
+        <h3>🐛 Debug Information</h3>
+        <div class="debug-stats">
+          <div class="stat-row">
+            <span class="stat-label">Extension Uptime:</span>
+            <span class="stat-value" id="debugUptime">--</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Tracked Tabs:</span>
+            <span class="stat-value" id="debugTrackedTabs">--</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Excluded Domains:</span>
+            <span class="stat-value" id="debugExcludedDomains">--</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Check Count:</span>
+            <span class="stat-value" id="debugCheckCount">--</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Last Check:</span>
+            <span class="stat-value" id="debugLastCheck">--</span>
+          </div>
+        </div>
+        <div class="debug-actions">
+          <button id="refreshDebugInfo" class="btn-secondary">Refresh Info</button>
+          <button id="openDebugConsole" class="btn-secondary">Open Console</button>
+          <button id="openDebugDashboard" class="btn-secondary">Dashboard</button>
+        </div>
+      </div>
+
     </div>
   </div>
 
