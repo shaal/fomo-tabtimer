@@ -7,7 +7,8 @@
     "tabs",
     "storage",
     "alarms",
-    "activeTab"
+    "activeTab",
+    "contextMenus"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -35,5 +36,14 @@
       "js": ["content/title-countdown.js"],
       "run_at": "document_start"
     }
-  ]
+  ],
+  "commands": {
+    "toggle-tab-lock": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "Lock/unlock current tab from auto-close"
+    }
+  }
 }

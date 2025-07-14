@@ -1,6 +1,7 @@
 class AutoCloseManager {
   constructor() {
     this.tabActivity = new Map();
+    this.lockedTabs = new Set(); // Track locked tabs
     this.pausedTime = null; // Track when auto-close was paused
     this.shortTimeoutInterval = null;
     this.memoryUsage = {
@@ -33,7 +34,9 @@ class AutoCloseManager {
     try {
       await this.loadSettings();
       await this.loadTabActivity();
+      await this.loadLockedTabs();
       this.setupEventListeners();
+      this.setupContextMenu();
       await this.initializeExistingTabs();
       this.startPeriodicCheck();
       
@@ -129,10 +132,29 @@ class AutoCloseManager {
     await chrome.storage.local.set({ tabActivity: tabActivityObj });
   }
 
+  async loadLockedTabs() {
+    this.debugLog('Loading locked tabs from storage...');
+    const stored = await chrome.storage.local.get(['lockedTabs']);
+    
+    if (stored.lockedTabs && Array.isArray(stored.lockedTabs)) {
+      this.lockedTabs = new Set(stored.lockedTabs);
+      this.debugLog(`Loaded ${this.lockedTabs.size} locked tabs from storage`);
+    } else {
+      this.debugLog('No stored locked tabs found');
+    }
+  }
+
+  async saveLockedTabs() {
+    // Convert Set to array for storage
+    const lockedTabsArray = Array.from(this.lockedTabs);
+    await chrome.storage.local.set({ lockedTabs: lockedTabsArray });
+  }
+
   setupEventListeners() {
     chrome.tabs.onActivated.addListener((activeInfo) => {
       this.debugLog(`Tab activated: ${activeInfo.tabId} - resetting timer`);
       this.resetTabTimer(activeInfo.tabId);
+      this.updateContextMenuVisibility(activeInfo.tabId);
     });
 
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -149,9 +171,13 @@ class AutoCloseManager {
 
     chrome.tabs.onRemoved.addListener((tabId) => {
       this.tabActivity.delete(tabId);
-      // Persist the updated activity to storage
-      this.saveTabActivity().catch(err => {
-        console.error('❌ Failed to save tab activity after tab removal:', err);
+      this.lockedTabs.delete(tabId);
+      // Persist the updated activity and locked tabs to storage
+      Promise.all([
+        this.saveTabActivity(),
+        this.saveLockedTabs()
+      ]).catch(err => {
+        console.error('❌ Failed to save tab data after tab removal:', err);
       });
     });
 
@@ -174,15 +200,13 @@ class AutoCloseManager {
             this.pauseAllTabTimers();
           }
         }
-        
-        // Restart the periodic check with new timing (this will stop timers if disabled)
-        this.startPeriodicCheck();
-        
-        // Handle debug mode changes
-        if (oldDebugMode !== this.settings.debugMode) {
-          this.debugLog(`Debug mode ${this.settings.debugMode ? 'ENABLED' : 'DISABLED'}`);
-          this.handleDebugModeChange();
-        }
+      }
+    });
+
+    // Add keyboard command listener
+    chrome.commands.onCommand.addListener((command) => {
+      if (command === 'toggle-tab-lock') {
+        this.handleToggleTabLockCommand();
       }
     });
 
@@ -215,11 +239,166 @@ class AutoCloseManager {
         // Basic communication test
         this.debugLog('Test message received from content script');
         sendResponse({ success: true, message: 'Background script is responding' });
+      } else if (message.type === 'getTabLockStatus') {
+        // Get lock status for a specific tab
+        const isLocked = this.lockedTabs.has(message.tabId);
+        sendResponse({ isLocked });
+      } else if (message.type === 'toggleTabLock') {
+        // Toggle lock status for a specific tab
+        const tabId = message.tabId;
+        const wasLocked = this.lockedTabs.has(tabId);
+        
+        if (wasLocked) {
+          this.unlockTab(tabId).then(() => {
+            sendResponse({ success: true, isLocked: false });
+          }).catch(error => {
+            sendResponse({ success: false, error: error.message });
+          });
+        } else {
+          this.lockTab(tabId).then(() => {
+            sendResponse({ success: true, isLocked: true });
+          }).catch(error => {
+            sendResponse({ success: false, error: error.message });
+          });
+        }
+        return true; // Keep message channel open for async response
       } else {
         this.debugLog(`Unknown message type: ${message.type}`);
         sendResponse({ error: 'Unknown message type' });
       }
     });
+  }
+
+  setupContextMenu() {
+    this.debugLog('Setting up context menu...');
+    
+    // Remove existing context menu items first
+    chrome.contextMenus.removeAll(() => {
+      // Create context menu for locking tabs
+      chrome.contextMenus.create({
+        id: 'lockTab',
+        title: 'Lock tab (disable auto-close)',
+        contexts: ['page', 'frame', 'link', 'image', 'video', 'audio'],
+        visible: true
+      });
+
+      // Create context menu for unlocking tabs
+      chrome.contextMenus.create({
+        id: 'unlockTab',
+        title: 'Unlock tab (enable auto-close)',
+        contexts: ['page', 'frame', 'link', 'image', 'video', 'audio'],
+        visible: false
+      });
+
+      this.debugLog('Context menu items created');
+    });
+
+    // Handle context menu clicks
+    chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+      if (!tab) return;
+
+      try {
+        if (info.menuItemId === 'lockTab') {
+          await this.lockTab(tab.id);
+        } else if (info.menuItemId === 'unlockTab') {
+          await this.unlockTab(tab.id);
+        }
+      } catch (error) {
+        console.error('❌ Error handling context menu click:', error);
+      }
+    });
+  }
+
+  async updateContextMenuVisibility(tabId) {
+    const isLocked = this.lockedTabs.has(tabId);
+    
+    chrome.contextMenus.update('lockTab', { 
+      visible: !isLocked 
+    });
+    
+    chrome.contextMenus.update('unlockTab', { 
+      visible: isLocked 
+    });
+  }
+
+  async lockTab(tabId) {
+    this.debugLog(`Locking tab ${tabId}`);
+    this.lockedTabs.add(tabId);
+    await this.saveLockedTabs();
+    await this.updateContextMenuVisibility(tabId);
+    await this.updateTabTitle(tabId, true);
+    
+    // Get tab info for logging
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      console.log(`🔒 Tab LOCKED: "${tab.title}" (ID: ${tabId}) - auto-close disabled`);
+    } catch (error) {
+      console.log(`🔒 Tab LOCKED: ID ${tabId} - auto-close disabled`);
+    }
+  }
+
+  async unlockTab(tabId) {
+    this.debugLog(`Unlocking tab ${tabId}`);
+    this.lockedTabs.delete(tabId);
+    await this.saveLockedTabs();
+    await this.updateContextMenuVisibility(tabId);
+    await this.updateTabTitle(tabId, false);
+    
+    // Reset timer when unlocking - fresh start
+    this.resetTabTimer(tabId);
+    
+    // Get tab info for logging
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      console.log(`🔓 Tab UNLOCKED: "${tab.title}" (ID: ${tabId}) - auto-close timer reset and enabled`);
+    } catch (error) {
+      console.log(`🔓 Tab UNLOCKED: ID ${tabId} - auto-close timer reset and enabled`);
+    }
+  }
+
+  async handleToggleTabLockCommand() {
+    try {
+      // Get the currently active tab
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!activeTab) {
+        console.log('⚠️ No active tab found for keyboard shortcut');
+        return;
+      }
+
+      // Toggle lock status
+      if (this.lockedTabs.has(activeTab.id)) {
+        await this.unlockTab(activeTab.id);
+        console.log(`⌨️ Keyboard shortcut: Tab unlocked`);
+      } else {
+        await this.lockTab(activeTab.id);
+        console.log(`⌨️ Keyboard shortcut: Tab locked`);
+      }
+    } catch (error) {
+      console.error('❌ Error handling keyboard shortcut:', error);
+    }
+  }
+
+  async updateTabTitle(tabId, isLocked) {
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      if (!tab) return;
+
+      // Don't modify titles for system pages (chrome://, chrome-extension://, etc.)
+      if (tab.url && (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://'))) {
+        return;
+      }
+
+      // Send message to content script to update title
+      chrome.tabs.sendMessage(tabId, {
+        type: 'updateTitleLockStatus',
+        isLocked: isLocked
+      }).catch(error => {
+        // Content script might not be loaded yet, or tab might not support content scripts
+        this.debugLog(`Could not send title update message to tab ${tabId}: ${error.message}`);
+      });
+    } catch (error) {
+      this.debugLog(`Error updating tab title for ${tabId}: ${error.message}`);
+    }
   }
 
   async initializeExistingTabs() {
@@ -235,6 +414,11 @@ class AutoCloseManager {
         if (!this.tabActivity.has(tab.id)) {
           this.tabActivity.set(tab.id, now);
           initializedCount++;
+        }
+        
+        // Update title for locked tabs
+        if (this.lockedTabs.has(tab.id)) {
+          await this.updateTabTitle(tab.id, true);
         }
       }
       
@@ -451,6 +635,12 @@ class AutoCloseManager {
   async shouldCloseTab(tab, now, timeoutMs) {
     this.debugLog(`Checking if tab should close: "${tab.title}" (${tab.url})`);
     
+    // Check if tab is locked
+    if (this.lockedTabs.has(tab.id)) {
+      this.debugLog(`Tab is locked, skipping: ${tab.title}`);
+      return false;
+    }
+    
     // Check if pinned
     if (tab.pinned && this.settings.excludePinned) {
       this.debugLog(`Tab is pinned, skipping: ${tab.title}`);
@@ -561,6 +751,7 @@ class AutoCloseManager {
     // Basic memory stats
     const stats = {
       trackedTabs: this.tabActivity.size,
+      lockedTabs: this.lockedTabs.size,
       excludedDomains: this.settings.excludedDomains.length,
       lastCheck: new Date(now).toLocaleTimeString(),
       checkCount: this.memoryUsage.checkCount,
@@ -616,11 +807,13 @@ class AutoCloseManager {
       isExcluded,
       isPinned: tab ? tab.pinned : false,
       isActive,
+      isLocked: this.lockedTabs.has(tabId),
       isPaused: !this.settings.enabled,
       url: tab ? tab.url : 'unknown',
       title: tab ? tab.title : 'unknown',
       settings: this.settings,
-      memoryStats: this.getMemoryStats()
+      memoryStats: this.getMemoryStats(),
+      shouldClose: tab ? this.shouldCloseTab(tab) : false
     };
 
     return debugInfo;
@@ -781,6 +974,17 @@ class AutoCloseManager {
       await chrome.tabs.remove(tab.id);
       this.debugLog(`Tab ${tab.id} removed successfully`);
       
+      // Verify tab was actually closed
+      try {
+        const stillExists = await chrome.tabs.get(tab.id);
+        if (stillExists) {
+          throw new Error(`Tab ${tab.id} still exists after removal attempt`);
+        }
+      } catch (tabNotFoundError) {
+        // This is expected - tab should not exist after removal
+        this.debugLog(`Tab ${tab.id} confirmed closed (tab not found)`);
+      }
+      
       this.tabActivity.delete(tab.id);
       
       // Persist the updated activity to storage
@@ -790,6 +994,21 @@ class AutoCloseManager {
     } catch (error) {
       this.debugLog(`Error closing tab ${tab.id}: ${error.message}`);
       console.error('❌ Error in closeAndSaveTab:', error);
+      
+      // Notify content script to reset title since closing failed
+      try {
+        chrome.tabs.sendMessage(tab.id, { 
+          type: 'closeFailedResetTitle',
+          originalTitle: tab.title
+        }).catch(msgError => {
+          this.debugLog(`Could not send reset title message to tab ${tab.id}: ${msgError.message}`);
+        });
+      } catch (msgError) {
+        this.debugLog(`Failed to send reset message to tab ${tab.id}: ${msgError.message}`);
+      }
+      
+      // Re-throw the error so the caller knows it failed
+      throw error;
     }
   }
 }

@@ -6,6 +6,7 @@ class TitleCountdown {
     this.lastActivity = Date.now();
     this.isActive = true;
     this.titleUpdateInterval = null;
+    this.isLocked = false;
     this.init();
   }
 
@@ -77,6 +78,15 @@ class TitleCountdown {
           this.stopTitleUpdateLoop();
           document.title = this.originalTitle;
         }
+      } else if (message.type === 'updateTitleLockStatus') {
+        this.isLocked = message.isLocked;
+        this.updateTabTitle();
+      } else if (message.type === 'closeFailedResetTitle') {
+        // Reset title when tab close fails
+        this.originalTitle = this.cleanTitle(message.originalTitle || document.title);
+        document.title = this.originalTitle;
+        // Reset activity to prevent immediate re-attempt
+        this.lastActivity = Date.now();
       }
     });
   }
@@ -126,19 +136,38 @@ class TitleCountdown {
   }
 
   async updateTabTitle() {
-    if (!this.debugMode) {
-      if (document.title !== this.originalTitle) {
-        document.title = this.originalTitle;
-      }
-      return;
-    }
-
-    // Get debug info from background script
+    // Get debug info from background script first (needed for lock status)
     let debugInfo = null;
     try {
       debugInfo = await chrome.runtime.sendMessage({ type: 'getDebugInfo' });
     } catch (error) {
       // Background script communication failed, use local fallback
+    }
+
+    // Check lock status from both local state and debug info
+    const isLocked = this.isLocked || (debugInfo && debugInfo.isLocked);
+    
+    // Always show lock status when tab is locked
+    if (isLocked) {
+      const lockPrefix = '🔒 ';
+      if (!document.title.startsWith(lockPrefix)) {
+        // Only update if not already showing lock status
+        const cleanTitle = document.title.replace(/^🔒 /, '');
+        document.title = `${lockPrefix}${cleanTitle}`;
+      }
+      return;
+    } else {
+      // Remove lock prefix if present and tab is not locked
+      if (document.title.startsWith('🔒 ')) {
+        document.title = document.title.replace(/^🔒 /, '');
+      }
+    }
+
+    if (!this.debugMode) {
+      if (document.title !== this.originalTitle) {
+        document.title = this.originalTitle;
+      }
+      return;
     }
 
     // Check if tab is excluded
@@ -179,9 +208,21 @@ class TitleCountdown {
           document.title = `⏰ ${timeStr} - ${this.originalTitle}`;
         }
       } else {
-        document.title = `🔥 CLOSING - ${this.originalTitle}`;
+        // Only show CLOSING if background script confirms tab should close
+        // This prevents showing CLOSING when the tab won't actually close
+        if (debugInfo && debugInfo.shouldClose) {
+          document.title = `🔥 CLOSING - ${this.originalTitle}`;
+        } else {
+          // If we can't confirm it should close, show expired state instead
+          document.title = `⏰ EXPIRED - ${this.originalTitle}`;
+        }
       }
     }
+  }
+
+  cleanTitle(title) {
+    // Remove timer prefixes from title
+    return title.replace(/^(🔒 |🔥 |⚠️ |⏰ |🔥 CLOSING - |⏰ EXPIRED - |\[[A-Z]+\] )/, '');
   }
 }
 

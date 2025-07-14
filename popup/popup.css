@@ -57,6 +57,40 @@ h1 {
   display: block;
 }
 
+.current-tab-section {
+  margin-top: 16px;
+}
+
+.tab-lock-toggle {
+  width: 100%;
+  padding: 12px;
+  background: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.tab-lock-toggle:hover {
+  background: #f57c00;
+  transform: translateY(-1px);
+}
+
+.tab-lock-toggle.locked {
+  background: #4caf50;
+}
+
+.tab-lock-toggle.locked:hover {
+  background: #45a049;
+}
+
 .advanced-toggle-section {
   background: white;
   border-bottom: 1px solid #e9ecef;

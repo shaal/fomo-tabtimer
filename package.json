@@ -2,19 +2,29 @@
   "name": "fomo-tabtimer-tests",
   "version": "1.0.0",
   "description": "Test suite for FOMO TabTimer Chrome Extension",
-  "main": "test-extension.js",
+  "main": "tests/test-extension.js",
   "scripts": {
-    "test": "node test-extension.js",
-    "test-basic": "node -e \"require('./test-extension.js').testExtension()\"",
-    "test-domain": "node -e \"require('./test-extension.js').testDomainExclusion()\"",
-    "test-restore": "node -e \"require('./test-extension.js').testTabRestoration()\"",
+    "test": "node tests/test-extension.js",
+    "test-basic": "node -e \"require('./tests/test-extension.js').testExtension()\"",
+    "test-domain": "node -e \"require('./tests/test-extension.js').testDomainExclusion()\"",
+    "test-restore": "node -e \"require('./tests/test-extension.js').testTabRestoration()\"",
+    "test-tab-locking": "node tests/run-tab-locking-test.js",
+    "test-tab-locking-direct": "npx playwright test tests/test-tab-locking.js",
     "install-playwright": "npx playwright install chromium",
     "setup": "npm install && npm run install-playwright"
   },
   "devDependencies": {
     "playwright": "^1.47.0"
   },
-  "keywords": ["chrome-extension", "testing", "playwright", "automation"],
+  "keywords": [
+    "chrome-extension",
+    "testing",
+    "playwright",
+    "automation"
+  ],
   "author": "Test Suite",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@playwright/test": "^1.54.1"
+  }
 }

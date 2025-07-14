@@ -87,6 +87,10 @@ class PopupManager {
     document.getElementById('openDebugDashboard').addEventListener('click', () => {
       chrome.tabs.create({ url: chrome.runtime.getURL('debug/debug-dashboard.html') });
     });
+
+    document.getElementById('tabLockToggle').addEventListener('click', () => {
+      this.toggleCurrentTabLock();
+    });
   }
 
   updateUI() {
@@ -100,6 +104,7 @@ class PopupManager {
     this.updateSettingsVisibility();
     this.updateDebugVisibility();
     this.renderDomainList();
+    this.updateTabLockUI();
   }
 
   updateSettingsVisibility() {
@@ -209,6 +214,70 @@ class PopupManager {
 
   openTabsPage() {
     chrome.tabs.create({ url: chrome.runtime.getURL('tabs/tabs.html') });
+  }
+
+  async updateTabLockUI() {
+    try {
+      // Get the currently active tab
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!activeTab) {
+        // Hide the button if no active tab
+        document.getElementById('tabLockToggle').style.display = 'none';
+        return;
+      }
+
+      // Show the button
+      document.getElementById('tabLockToggle').style.display = 'flex';
+
+      // Get lock status from background script
+      const response = await chrome.runtime.sendMessage({
+        type: 'getTabLockStatus',
+        tabId: activeTab.id
+      });
+
+      const button = document.getElementById('tabLockToggle');
+      const icon = document.getElementById('tabLockIcon');
+      const text = document.getElementById('tabLockText');
+
+      if (response && response.isLocked) {
+        button.classList.add('locked');
+        icon.textContent = '🔓';
+        text.textContent = 'Unlock Current Tab';
+      } else {
+        button.classList.remove('locked');
+        icon.textContent = '🔒';
+        text.textContent = 'Lock Current Tab';
+      }
+    } catch (error) {
+      console.error('Failed to update tab lock UI:', error);
+      // Hide button on error
+      document.getElementById('tabLockToggle').style.display = 'none';
+    }
+  }
+
+  async toggleCurrentTabLock() {
+    try {
+      // Get the currently active tab
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!activeTab) {
+        console.log('No active tab found');
+        return;
+      }
+
+      // Send toggle message to background script
+      const response = await chrome.runtime.sendMessage({
+        type: 'toggleTabLock',
+        tabId: activeTab.id
+      });
+
+      if (response && response.success) {
+        // Update UI to reflect new state
+        this.updateTabLockUI();
+        console.log(`Tab ${response.isLocked ? 'locked' : 'unlocked'} via popup button`);
+      }
+    } catch (error) {
+      console.error('Failed to toggle tab lock:', error);
+    }
   }
 }
 
