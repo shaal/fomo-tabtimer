@@ -7,7 +7,6 @@
     "tabs",
     "storage",
     "alarms",
-    "activeTab",
     "contextMenus"
   ],
   "host_permissions": [
