@@ -677,6 +677,37 @@ class AutoCloseManager {
     return shouldClose;
   }
 
+  // Synchronous version of shouldCloseTab for use in getDebugInfoForTab
+  computeShouldCloseSync(tab, now, timeoutMs) {
+    // Check if tab is locked
+    if (this.lockedTabs.has(tab.id)) {
+      return false;
+    }
+
+    // Check if pinned
+    if (tab.pinned && this.settings.excludePinned) {
+      return false;
+    }
+
+    // Check domain exclusion
+    if (this.isExcludedDomain(tab.url)) {
+      return false;
+    }
+
+    // Check if active
+    if (tab.active) {
+      return false;
+    }
+
+    const lastActivity = this.tabActivity.get(tab.id);
+    if (!lastActivity) {
+      return false;
+    }
+
+    const timeSinceActivity = now - lastActivity;
+    return timeSinceActivity > timeoutMs;
+  }
+
   isExcludedDomain(url) {
     if (!url) {
       this.debugLog('No URL provided for domain check');
@@ -813,7 +844,8 @@ class AutoCloseManager {
       title: tab ? tab.title : 'unknown',
       settings: this.settings,
       memoryStats: this.getMemoryStats(),
-      shouldClose: tab ? this.shouldCloseTab(tab) : false
+      // Compute shouldClose synchronously to avoid Promise issue
+      shouldClose: tab ? this.computeShouldCloseSync(tab, now, timeoutMs) : false
     };
 
     return debugInfo;

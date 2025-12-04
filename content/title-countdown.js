@@ -99,7 +99,8 @@ class TitleCountdown {
       this.updateTabTitle();
     };
 
-    ['click', 'keydown', 'mousemove', 'scroll', 'focus'].forEach(event => {
+    // Note: 'focus' is handled separately on window to avoid duplicate handling
+    ['click', 'keydown', 'mousemove', 'scroll'].forEach(event => {
       document.addEventListener(event, resetActivity, { passive: true });
     });
 
@@ -221,8 +222,16 @@ class TitleCountdown {
   }
 
   cleanTitle(title) {
-    // Remove timer prefixes from title
-    return title.replace(/^(🔒 |🔥 |⚠️ |⏰ |🔥 CLOSING - |⏰ EXPIRED - |\[[A-Z]+\] )/, '');
+    // Remove timer prefixes from title - loop to handle multiple stacked prefixes
+    const prefixPattern = /^(🔒 |🔥 |⚠️ |⏰ |🔥 CLOSING - |⏰ EXPIRED - |🔥 \d+:\d+ - |⚠️ \d+:\d+ - |⏰ \d+:\d+ - |\[[A-Z]+\] )/;
+    let cleanedTitle = title;
+
+    // Keep removing prefixes until none remain (handles stacked prefixes)
+    while (prefixPattern.test(cleanedTitle)) {
+      cleanedTitle = cleanedTitle.replace(prefixPattern, '');
+    }
+
+    return cleanedTitle;
   }
 }
 
