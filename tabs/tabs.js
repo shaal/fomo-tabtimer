@@ -478,7 +478,10 @@ class TabsManager {
 
   async restoreHourGroup(date, hour) {
     this.debugLog('restoreHourGroup called with:', { date, hour });
-    
+
+    // Refresh tabs to ensure we have the latest data
+    await this.loadTabs();
+
     const hourTabs = this.filteredTabs.filter(tab => {
       const tabDate = tab.date || new Date(tab.closedAt).toDateString();
       const hourGroup = tab.hourGroup || this.getHourGroupFromClosedAt(tab.closedAt);
@@ -501,7 +504,10 @@ class TabsManager {
 
   async restoreWindowGroup(date, hour, windowKey) {
     this.debugLog('restoreWindowGroup called with:', { date, hour, windowKey });
-    
+
+    // Refresh tabs to ensure we have the latest data
+    await this.loadTabs();
+
     const windowTabs = this.filteredTabs.filter(tab => {
       const tabDate = tab.date || new Date(tab.closedAt).toDateString();
       const windowId = tab.windowId || 'unknown';

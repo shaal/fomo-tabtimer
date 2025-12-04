@@ -319,7 +319,8 @@ input:checked + .slider:before {
 
 .tabs-count {
   font-size: 12px;
-  color: #666;
+  color: #6c757d;
+  font-weight: 500;
   background: #f0f0f0;
   padding: 2px 8px;
   border-radius: 10px;
@@ -348,12 +349,6 @@ input:checked + .slider:before {
   text-align: center;
   margin: 0;
   line-height: 1.4;
-}
-
-.tabs-count {
-  font-size: 12px;
-  color: #6c757d;
-  font-weight: 500;
 }
 
 .debug-description {

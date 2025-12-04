@@ -43,7 +43,8 @@ class TitleCountdown {
       hours: 60 * 60 * 1000,
       days: 24 * 60 * 60 * 1000
     };
-    return timeValue * multipliers[timeUnit];
+    // Fallback to minutes if unknown timeUnit
+    return timeValue * (multipliers[timeUnit] || multipliers.minutes);
   }
 
   setupMessageListener() {

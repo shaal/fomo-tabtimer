@@ -177,13 +177,15 @@ class PopupManager {
     const advancedSettings = document.getElementById('advancedSettings');
     const advancedToggle = document.getElementById('advancedToggle');
     const isVisible = advancedSettings.style.display !== 'none';
-    
+
     if (isVisible) {
       advancedSettings.style.display = 'none';
       advancedToggle.classList.remove('expanded');
+      advancedToggle.setAttribute('aria-expanded', 'false');
     } else {
       advancedSettings.style.display = 'block';
       advancedToggle.classList.add('expanded');
+      advancedToggle.setAttribute('aria-expanded', 'true');
     }
   }
 
