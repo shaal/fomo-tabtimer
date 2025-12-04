@@ -219,8 +219,25 @@ body {
   align-items: center;
 }
 
+.hour-group {
+  margin-bottom: 20px;
+}
+
+.hour-header {
+  background: #fff3cd;
+  padding: 10px 20px;
+  border-bottom: 1px solid #ffeaa7;
+  font-size: 13px;
+  color: #856404;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .window-group {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+  margin-left: 20px;
 }
 
 .window-header {

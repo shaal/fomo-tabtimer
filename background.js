@@ -1,7 +1,10 @@
 class AutoCloseManager {
   constructor() {
     this.tabActivity = new Map();
+    this.lockedTabs = new Set(); // Track locked tabs
+    this.pausedTime = null; // Track when auto-close was paused
     this.shortTimeoutInterval = null;
+    this.contextMenuListenerRegistered = false; // Guard for listener accumulation
     this.memoryUsage = {
       lastCheck: Date.now(),
       peakUsage: 0,
@@ -15,7 +18,7 @@ class AutoCloseManager {
       excludedDomains: [],
       excludePinned: true,
       debugMode: false,
-      timerPersistenceMode: 'absolute' // 'absolute' or 'continue'
+      timerPersistenceMode: 'continue' // Always use 'continue' mode
     };
     this.init();
   }
@@ -32,7 +35,10 @@ class AutoCloseManager {
     try {
       await this.loadSettings();
       await this.loadTabActivity();
+      await this.loadLockedTabs();
       this.setupEventListeners();
+      this.setupContextMenu();
+      await this.initializeExistingTabs();
       this.startPeriodicCheck();
       
       this.debugLog('Background script initialized successfully');
@@ -62,28 +68,41 @@ class AutoCloseManager {
 
   async loadTabActivity() {
     this.debugLog('Loading tab activity from storage...');
-    const stored = await chrome.storage.local.get(['tabActivity']);
+    const stored = await chrome.storage.local.get(['tabActivity', 'pausedTime']);
     
     if (stored.tabActivity) {
       // Convert stored object back to Map
       this.tabActivity = new Map(Object.entries(stored.tabActivity));
       this.debugLog(`Loaded activity for ${this.tabActivity.size} tabs from storage`);
       
-      // Check for tabs that should have been closed during downtime
-      await this.checkForExpiredTabs();
+      // Load pause time if it exists
+      if (stored.pausedTime) {
+        this.pausedTime = stored.pausedTime;
+        this.debugLog(`Loaded pause time: ${new Date(this.pausedTime).toLocaleTimeString()}`);
+        
+        // If we were paused and auto-close is now enabled, resume timers
+        if (this.settings.enabled) {
+          this.debugLog('Auto-close is enabled but timers were paused, resuming...');
+          await this.resumeAllTabTimers();
+        }
+      }
+      
+      // Check for tabs that should have been closed during downtime (only if not paused)
+      if (!this.pausedTime) {
+        await this.checkForExpiredTabs();
+      }
     } else {
       this.debugLog('No stored tab activity found');
     }
   }
 
   async checkForExpiredTabs() {
-    this.debugLog(`Checking for tabs that expired during downtime (mode: ${this.settings.timerPersistenceMode})...`);
+    this.debugLog('Checking for tabs that expired during downtime (give fresh timers mode)...');
     
     const tabs = await chrome.tabs.query({});
     const now = Date.now();
     const timeoutMs = this.getTimeoutInMs();
     
-    let expiredCount = 0;
     let continuedCount = 0;
     
     for (const tab of tabs) {
@@ -92,28 +111,16 @@ class AutoCloseManager {
       if (lastActivity) {
         const timeSinceActivity = now - lastActivity;
         
-        if (this.settings.timerPersistenceMode === 'absolute') {
-          // Absolute mode: Close tabs that should have been closed during downtime
-          const shouldSkipPinned = tab.pinned && this.settings.excludePinned;
-          if (timeSinceActivity > timeoutMs && !tab.active && !shouldSkipPinned && !this.isExcludedDomain(tab.url)) {
-            this.debugLog(`Closing expired tab: ${tab.title} (inactive for ${Math.round(timeSinceActivity/1000)}s)`);
-            await this.closeAndSaveTab(tab);
-            expiredCount++;
-          }
-        } else if (this.settings.timerPersistenceMode === 'continue') {
-          // Continue mode: Reset timers to continue from where they left off
-          if (timeSinceActivity > timeoutMs) {
-            this.debugLog(`Continuing timer for tab: ${tab.title} (was inactive for ${Math.round(timeSinceActivity/1000)}s, resetting to fresh timeout)`);
-            this.resetTabTimer(tab.id);
-            continuedCount++;
-          }
+        // Give fresh timers: Reset timers to continue from where they left off
+        if (timeSinceActivity > timeoutMs) {
+          this.debugLog(`Continuing timer for tab: ${tab.title} (was inactive for ${Math.round(timeSinceActivity/1000)}s, resetting to fresh timeout)`);
+          this.resetTabTimer(tab.id);
+          continuedCount++;
         }
       }
     }
     
-    if (this.settings.timerPersistenceMode === 'absolute' && expiredCount > 0) {
-      this.debugLog(`Closed ${expiredCount} tabs that expired during downtime`);
-    } else if (this.settings.timerPersistenceMode === 'continue' && continuedCount > 0) {
+    if (continuedCount > 0) {
       this.debugLog(`Continued ${continuedCount} timers from where they left off`);
     } else {
       this.debugLog('No timer adjustments needed');
@@ -126,10 +133,29 @@ class AutoCloseManager {
     await chrome.storage.local.set({ tabActivity: tabActivityObj });
   }
 
+  async loadLockedTabs() {
+    this.debugLog('Loading locked tabs from storage...');
+    const stored = await chrome.storage.local.get(['lockedTabs']);
+    
+    if (stored.lockedTabs && Array.isArray(stored.lockedTabs)) {
+      this.lockedTabs = new Set(stored.lockedTabs);
+      this.debugLog(`Loaded ${this.lockedTabs.size} locked tabs from storage`);
+    } else {
+      this.debugLog('No stored locked tabs found');
+    }
+  }
+
+  async saveLockedTabs() {
+    // Convert Set to array for storage
+    const lockedTabsArray = Array.from(this.lockedTabs);
+    await chrome.storage.local.set({ lockedTabs: lockedTabsArray });
+  }
+
   setupEventListeners() {
     chrome.tabs.onActivated.addListener((activeInfo) => {
       this.debugLog(`Tab activated: ${activeInfo.tabId} - resetting timer`);
       this.resetTabTimer(activeInfo.tabId);
+      this.updateContextMenuVisibility(activeInfo.tabId);
     });
 
     chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -146,25 +172,42 @@ class AutoCloseManager {
 
     chrome.tabs.onRemoved.addListener((tabId) => {
       this.tabActivity.delete(tabId);
-      // Persist the updated activity to storage
-      this.saveTabActivity().catch(err => {
-        console.error('❌ Failed to save tab activity after tab removal:', err);
+      this.lockedTabs.delete(tabId);
+      // Persist the updated activity and locked tabs to storage
+      Promise.all([
+        this.saveTabActivity(),
+        this.saveLockedTabs()
+      ]).catch(err => {
+        console.error('❌ Failed to save tab data after tab removal:', err);
       });
     });
 
     chrome.storage.onChanged.addListener((changes, namespace) => {
       if (namespace === 'sync' && changes.autoCloseSettings) {
+        const oldSettings = { ...this.settings };
         const oldDebugMode = this.settings.debugMode;
         this.settings = { ...this.settings, ...changes.autoCloseSettings.newValue };
         
-        // Restart the periodic check with new timing
-        this.startPeriodicCheck();
+        // Check if auto-close was just enabled/disabled
+        const wasEnabled = oldSettings.enabled;
+        const isNowEnabled = this.settings.enabled;
         
-        // Handle debug mode changes
-        if (oldDebugMode !== this.settings.debugMode) {
-          this.debugLog(`Debug mode ${this.settings.debugMode ? 'ENABLED' : 'DISABLED'}`);
-          this.handleDebugModeChange();
+        if (wasEnabled !== isNowEnabled) {
+          if (isNowEnabled) {
+            this.debugLog('Auto-close re-enabled - resuming paused timers');
+            this.resumeAllTabTimers();
+          } else {
+            this.debugLog('Auto-close disabled - pausing all timers');
+            this.pauseAllTabTimers();
+          }
         }
+      }
+    });
+
+    // Add keyboard command listener
+    chrome.commands.onCommand.addListener((command) => {
+      if (command === 'toggle-tab-lock') {
+        this.handleToggleTabLockCommand();
       }
     });
 
@@ -197,6 +240,29 @@ class AutoCloseManager {
         // Basic communication test
         this.debugLog('Test message received from content script');
         sendResponse({ success: true, message: 'Background script is responding' });
+      } else if (message.type === 'getTabLockStatus') {
+        // Get lock status for a specific tab
+        const isLocked = this.lockedTabs.has(message.tabId);
+        sendResponse({ isLocked });
+      } else if (message.type === 'toggleTabLock') {
+        // Toggle lock status for a specific tab
+        const tabId = message.tabId;
+        const wasLocked = this.lockedTabs.has(tabId);
+        
+        if (wasLocked) {
+          this.unlockTab(tabId).then(() => {
+            sendResponse({ success: true, isLocked: false });
+          }).catch(error => {
+            sendResponse({ success: false, error: error.message });
+          });
+        } else {
+          this.lockTab(tabId).then(() => {
+            sendResponse({ success: true, isLocked: true });
+          }).catch(error => {
+            sendResponse({ success: false, error: error.message });
+          });
+        }
+        return true; // Keep message channel open for async response
       } else {
         this.debugLog(`Unknown message type: ${message.type}`);
         sendResponse({ error: 'Unknown message type' });
@@ -204,7 +270,185 @@ class AutoCloseManager {
     });
   }
 
+  setupContextMenu() {
+    this.debugLog('Setting up context menu...');
+
+    // Remove existing context menu items first
+    chrome.contextMenus.removeAll(() => {
+      // Create context menu for locking tabs
+      chrome.contextMenus.create({
+        id: 'lockTab',
+        title: 'Lock tab (disable auto-close)',
+        contexts: ['page', 'frame', 'link', 'image', 'video', 'audio'],
+        visible: true
+      });
+
+      // Create context menu for unlocking tabs
+      chrome.contextMenus.create({
+        id: 'unlockTab',
+        title: 'Unlock tab (enable auto-close)',
+        contexts: ['page', 'frame', 'link', 'image', 'video', 'audio'],
+        visible: false
+      });
+
+      this.debugLog('Context menu items created');
+    });
+
+    // Guard against registering multiple listeners
+    if (!this.contextMenuListenerRegistered) {
+      this.contextMenuListenerRegistered = true;
+
+      // Handle context menu clicks
+      chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+        if (!tab) return;
+
+        try {
+          if (info.menuItemId === 'lockTab') {
+            await this.lockTab(tab.id);
+          } else if (info.menuItemId === 'unlockTab') {
+            await this.unlockTab(tab.id);
+          }
+        } catch (error) {
+          console.error('❌ Error handling context menu click:', error);
+        }
+      });
+    }
+  }
+
+  async updateContextMenuVisibility(tabId) {
+    const isLocked = this.lockedTabs.has(tabId);
+
+    chrome.contextMenus.update('lockTab', { visible: !isLocked }, () => {
+      if (chrome.runtime.lastError) {
+        this.debugLog('Error updating lockTab menu:', chrome.runtime.lastError.message);
+      }
+    });
+
+    chrome.contextMenus.update('unlockTab', { visible: isLocked }, () => {
+      if (chrome.runtime.lastError) {
+        this.debugLog('Error updating unlockTab menu:', chrome.runtime.lastError.message);
+      }
+    });
+  }
+
+  async lockTab(tabId) {
+    this.debugLog(`Locking tab ${tabId}`);
+    this.lockedTabs.add(tabId);
+    await this.saveLockedTabs();
+    await this.updateContextMenuVisibility(tabId);
+    await this.updateTabTitle(tabId, true);
+    
+    // Get tab info for logging
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      console.log(`🔒 Tab LOCKED: "${tab.title}" (ID: ${tabId}) - auto-close disabled`);
+    } catch (error) {
+      console.log(`🔒 Tab LOCKED: ID ${tabId} - auto-close disabled`);
+    }
+  }
+
+  async unlockTab(tabId) {
+    this.debugLog(`Unlocking tab ${tabId}`);
+    this.lockedTabs.delete(tabId);
+    await this.saveLockedTabs();
+    await this.updateContextMenuVisibility(tabId);
+    await this.updateTabTitle(tabId, false);
+    
+    // Reset timer when unlocking - fresh start
+    this.resetTabTimer(tabId);
+    
+    // Get tab info for logging
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      console.log(`🔓 Tab UNLOCKED: "${tab.title}" (ID: ${tabId}) - auto-close timer reset and enabled`);
+    } catch (error) {
+      console.log(`🔓 Tab UNLOCKED: ID ${tabId} - auto-close timer reset and enabled`);
+    }
+  }
+
+  async handleToggleTabLockCommand() {
+    try {
+      // Get the currently active tab
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!activeTab) {
+        console.log('⚠️ No active tab found for keyboard shortcut');
+        return;
+      }
+
+      // Toggle lock status
+      if (this.lockedTabs.has(activeTab.id)) {
+        await this.unlockTab(activeTab.id);
+        console.log(`⌨️ Keyboard shortcut: Tab unlocked`);
+      } else {
+        await this.lockTab(activeTab.id);
+        console.log(`⌨️ Keyboard shortcut: Tab locked`);
+      }
+    } catch (error) {
+      console.error('❌ Error handling keyboard shortcut:', error);
+    }
+  }
+
+  async updateTabTitle(tabId, isLocked) {
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      if (!tab) return;
+
+      // Don't modify titles for system pages (chrome://, chrome-extension://, etc.)
+      if (tab.url && (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://'))) {
+        return;
+      }
+
+      // Send message to content script to update title
+      chrome.tabs.sendMessage(tabId, {
+        type: 'updateTitleLockStatus',
+        isLocked: isLocked
+      }).catch(error => {
+        // Content script might not be loaded yet, or tab might not support content scripts
+        this.debugLog(`Could not send title update message to tab ${tabId}: ${error.message}`);
+      });
+    } catch (error) {
+      this.debugLog(`Error updating tab title for ${tabId}: ${error.message}`);
+    }
+  }
+
+  async initializeExistingTabs() {
+    this.debugLog('Initializing timers for all existing tabs...');
+    
+    try {
+      const tabs = await chrome.tabs.query({});
+      const now = Date.now();
+      let initializedCount = 0;
+      
+      for (const tab of tabs) {
+        // Only initialize if tab doesn't already have a timer
+        if (!this.tabActivity.has(tab.id)) {
+          this.tabActivity.set(tab.id, now);
+          initializedCount++;
+        }
+        
+        // Update title for locked tabs
+        if (this.lockedTabs.has(tab.id)) {
+          await this.updateTabTitle(tab.id, true);
+        }
+      }
+      
+      this.debugLog(`Initialized timers for ${initializedCount} existing tabs`);
+      
+      // Persist the updated activity to storage
+      await this.saveTabActivity();
+      
+    } catch (error) {
+      console.error('❌ Error initializing existing tabs:', error);
+    }
+  }
+
   resetTabTimer(tabId) {
+    // Don't reset timers when auto-close is disabled (paused state)
+    if (!this.settings.enabled) {
+      this.debugLog(`Timer reset skipped for tab ${tabId} - auto-close is disabled`);
+      return;
+    }
+    
     const now = Date.now();
     const previous = this.tabActivity.get(tabId);
     
@@ -243,6 +487,49 @@ class AutoCloseManager {
     }
   }
 
+  async pauseAllTabTimers() {
+    this.debugLog('Pausing all tab timers...');
+    
+    try {
+      // Record when we paused
+      this.pausedTime = Date.now();
+      this.debugLog(`Timers paused at: ${new Date(this.pausedTime).toLocaleTimeString()}`);
+      
+      // Save pause time to storage
+      await chrome.storage.local.set({ pausedTime: this.pausedTime });
+      
+    } catch (error) {
+      console.error('❌ Error pausing all tab timers:', error);
+    }
+  }
+
+  async resumeAllTabTimers() {
+    this.debugLog('Resuming all tab timers with fresh timeout...');
+    
+    try {
+      const now = Date.now();
+      let resetCount = 0;
+      
+      // Reset all tab timers to current time (fresh start)
+      for (const [tabId] of this.tabActivity.entries()) {
+        this.tabActivity.set(tabId, now);
+        resetCount++;
+      }
+      
+      this.debugLog(`Reset ${resetCount} tabs to fresh timeout`);
+      
+      // Clear pause time
+      this.pausedTime = null;
+      await chrome.storage.local.remove(['pausedTime']);
+      
+      // Persist the updated activity to storage
+      await this.saveTabActivity();
+      
+    } catch (error) {
+      console.error('❌ Error resuming all tab timers:', error);
+    }
+  }
+
   updateTabActivity(tabId) {
     // This method is now just an alias for resetTabTimer to maintain compatibility
     this.resetTabTimer(tabId);
@@ -254,6 +541,12 @@ class AutoCloseManager {
     if (this.shortTimeoutInterval) {
       clearInterval(this.shortTimeoutInterval);
       this.shortTimeoutInterval = null;
+    }
+    
+    // If auto-close is disabled, don't start any timers
+    if (!this.settings.enabled) {
+      this.debugLog('Auto-close disabled, stopping all timers');
+      return;
     }
     
     // Set check frequency based on timeout setting
@@ -352,6 +645,12 @@ class AutoCloseManager {
   async shouldCloseTab(tab, now, timeoutMs) {
     this.debugLog(`Checking if tab should close: "${tab.title}" (${tab.url})`);
     
+    // Check if tab is locked
+    if (this.lockedTabs.has(tab.id)) {
+      this.debugLog(`Tab is locked, skipping: ${tab.title}`);
+      return false;
+    }
+    
     // Check if pinned
     if (tab.pinned && this.settings.excludePinned) {
       this.debugLog(`Tab is pinned, skipping: ${tab.title}`);
@@ -386,6 +685,37 @@ class AutoCloseManager {
     
     
     return shouldClose;
+  }
+
+  // Synchronous version of shouldCloseTab for use in getDebugInfoForTab
+  computeShouldCloseSync(tab, now, timeoutMs) {
+    // Check if tab is locked
+    if (this.lockedTabs.has(tab.id)) {
+      return false;
+    }
+
+    // Check if pinned
+    if (tab.pinned && this.settings.excludePinned) {
+      return false;
+    }
+
+    // Check domain exclusion
+    if (this.isExcludedDomain(tab.url)) {
+      return false;
+    }
+
+    // Check if active
+    if (tab.active) {
+      return false;
+    }
+
+    const lastActivity = this.tabActivity.get(tab.id);
+    if (!lastActivity) {
+      return false;
+    }
+
+    const timeSinceActivity = now - lastActivity;
+    return timeSinceActivity > timeoutMs;
   }
 
   isExcludedDomain(url) {
@@ -462,6 +792,7 @@ class AutoCloseManager {
     // Basic memory stats
     const stats = {
       trackedTabs: this.tabActivity.size,
+      lockedTabs: this.lockedTabs.size,
       excludedDomains: this.settings.excludedDomains.length,
       lastCheck: new Date(now).toLocaleTimeString(),
       checkCount: this.memoryUsage.checkCount,
@@ -482,17 +813,28 @@ class AutoCloseManager {
       isExcluded = this.isExcludedDomain(tab.url);
     }
     
-    // Calculate time remaining - key fix: only countdown when tab is INACTIVE
+    // Calculate time remaining
     let timeRemaining;
+    let timeSinceActivity = 0;
     const isActive = tab ? tab.active : false;
     
-    if (isActive) {
+    // If auto-close is disabled, show paused state
+    if (!this.settings.enabled) {
+      if (this.pausedTime && lastActivity) {
+        // Show time remaining at the moment it was paused
+        timeSinceActivity = this.pausedTime - lastActivity;
+        timeRemaining = Math.max(0, timeoutMs - timeSinceActivity);
+      } else {
+        timeRemaining = timeoutMs;
+      }
+      this.debugLog(`Tab ${tabId} is PAUSED - showing paused state`);
+    } else if (isActive) {
       // Tab is active - timer should show full timeout
       timeRemaining = timeoutMs;
       this.debugLog(`Tab ${tabId} is ACTIVE - showing full timeout: ${Math.round(timeRemaining/1000)}s`);
     } else {
       // Tab is inactive - show countdown
-      const timeSinceActivity = lastActivity ? now - lastActivity : 0;
+      timeSinceActivity = lastActivity ? now - lastActivity : 0;
       timeRemaining = lastActivity ? Math.max(0, timeoutMs - timeSinceActivity) : timeoutMs;
       this.debugLog(`Tab ${tabId} is INACTIVE - time since activity: ${Math.round(timeSinceActivity/1000)}s, remaining: ${Math.round(timeRemaining/1000)}s`);
     }
@@ -500,16 +842,20 @@ class AutoCloseManager {
     const debugInfo = {
       tabId,
       lastActivity: lastActivity ? new Date(lastActivity).toLocaleTimeString() : 'Never',
-      timeSinceActivity: lastActivity ? now - lastActivity : 0,
+      timeSinceActivity,
       timeoutMs,
       timeRemaining,
       isExcluded,
       isPinned: tab ? tab.pinned : false,
       isActive,
+      isLocked: this.lockedTabs.has(tabId),
+      isPaused: !this.settings.enabled,
       url: tab ? tab.url : 'unknown',
       title: tab ? tab.title : 'unknown',
       settings: this.settings,
-      memoryStats: this.getMemoryStats()
+      memoryStats: this.getMemoryStats(),
+      // Compute shouldClose synchronously to avoid Promise issue
+      shouldClose: tab ? this.computeShouldCloseSync(tab, now, timeoutMs) : false
     };
 
     return debugInfo;
@@ -577,18 +923,81 @@ class AutoCloseManager {
     }
   }
 
+  cleanTitleForSaving(title) {
+    // Strip debug information from title before saving
+    return title
+      .replace(/^🔥 CLOSING - /, '')
+      .replace(/^🔥 \d+:\d+ - /, '')
+      .replace(/^⚠️ \d+:\d+ - /, '')
+      .replace(/^⏰ \d+:\d+ - /, '')
+      .replace(/^\[EXCLUDED\] /, '');
+  }
+
+  getHourGroup(date) {
+    const hour = date.getHours();
+    const startHour = hour.toString().padStart(2, '0') + ':00';
+    const endHour = ((hour + 1) % 24).toString().padStart(2, '0') + ':00';
+    return `${startHour}-${endHour}`;
+  }
+
+  isNewTab(url) {
+    if (!url) return false;
+    
+    const newTabUrls = [
+      'chrome://newtab/',
+      'chrome://new-tab-page/',
+      'chrome-search://local-ntp/local-ntp.html',
+      'edge://newtab/',
+      'about:newtab',
+      'about:blank'
+    ];
+    
+    // Check exact matches
+    if (newTabUrls.includes(url)) {
+      return true;
+    }
+    
+    // Check if URL starts with new tab patterns
+    const newTabPrefixes = [
+      'chrome://newtab',
+      'chrome://new-tab-page',
+      'chrome-search://local-ntp',
+      'edge://newtab'
+    ];
+    
+    return newTabPrefixes.some(prefix => url.startsWith(prefix));
+  }
+
   async closeAndSaveTab(tab) {
     try {
       this.debugLog(`Starting to close and save tab: ${tab.title} (ID: ${tab.id})`);
       
+      // Check if this is a new tab that shouldn't be saved
+      if (this.isNewTab(tab.url)) {
+        this.debugLog(`Tab is a new tab (${tab.url}), closing without saving`);
+        await chrome.tabs.remove(tab.id);
+        this.debugLog(`New tab ${tab.id} removed successfully without saving`);
+        
+        this.tabActivity.delete(tab.id);
+        
+        // Persist the updated activity to storage
+        this.saveTabActivity().catch(err => {
+          console.error('❌ Failed to save tab activity after tab removal:', err);
+        });
+        return;
+      }
+      
       const now = new Date();
+      const cleanTitle = this.cleanTitleForSaving(tab.title);
+      const hourGroup = this.getHourGroup(now);
       const savedTab = {
         id: `tab_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
         url: tab.url,
-        title: tab.title,
+        title: cleanTitle,
         favicon: tab.favIconUrl,
         windowId: tab.windowId,
-        windowTitle: `Closed at ${now.toLocaleTimeString()} on ${now.toLocaleDateString()}`,
+        windowTitle: `Window ${tab.windowId}`,
+        hourGroup: hourGroup,
         closedAt: now.toISOString(),
         date: now.toDateString()
       };
@@ -607,6 +1016,17 @@ class AutoCloseManager {
       await chrome.tabs.remove(tab.id);
       this.debugLog(`Tab ${tab.id} removed successfully`);
       
+      // Verify tab was actually closed
+      try {
+        const stillExists = await chrome.tabs.get(tab.id);
+        if (stillExists) {
+          throw new Error(`Tab ${tab.id} still exists after removal attempt`);
+        }
+      } catch (tabNotFoundError) {
+        // This is expected - tab should not exist after removal
+        this.debugLog(`Tab ${tab.id} confirmed closed (tab not found)`);
+      }
+      
       this.tabActivity.delete(tab.id);
       
       // Persist the updated activity to storage
@@ -616,6 +1036,21 @@ class AutoCloseManager {
     } catch (error) {
       this.debugLog(`Error closing tab ${tab.id}: ${error.message}`);
       console.error('❌ Error in closeAndSaveTab:', error);
+      
+      // Notify content script to reset title since closing failed
+      try {
+        chrome.tabs.sendMessage(tab.id, { 
+          type: 'closeFailedResetTitle',
+          originalTitle: tab.title
+        }).catch(msgError => {
+          this.debugLog(`Could not send reset title message to tab ${tab.id}: ${msgError.message}`);
+        });
+      } catch (msgError) {
+        this.debugLog(`Failed to send reset message to tab ${tab.id}: ${msgError.message}`);
+      }
+      
+      // Re-throw the error so the caller knows it failed
+      throw error;
     }
   }
 }

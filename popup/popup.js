@@ -6,7 +6,7 @@ class PopupManager {
       timeUnit: 'minutes',
       excludedDomains: [],
       excludePinned: true,
-      timerPersistenceMode: 'absolute',
+      timerPersistenceMode: 'continue',
       debugMode: false
     };
     this.init();
@@ -35,28 +35,30 @@ class PopupManager {
   setupEventListeners() {
     document.getElementById('enableToggle').addEventListener('change', (e) => {
       this.settings.enabled = e.target.checked;
+      this.updateStatusIndicator();
       this.updateSettingsVisibility();
+      this.saveSettings();
+    });
+
+    document.getElementById('advancedToggle').addEventListener('click', () => {
+      this.toggleAdvancedSettings();
     });
 
     document.getElementById('timeValue').addEventListener('input', (e) => {
       this.settings.timeValue = parseInt(e.target.value) || 1;
+      this.saveSettings();
     });
 
     document.getElementById('timeUnit').addEventListener('change', (e) => {
       this.settings.timeUnit = e.target.value;
+      this.saveSettings();
     });
 
-    document.querySelectorAll('input[name="timerPersistence"]').forEach(radio => {
-      radio.addEventListener('change', (e) => {
-        if (e.target.checked) {
-          this.settings.timerPersistenceMode = e.target.value;
-        }
-      });
-    });
 
     document.getElementById('debugToggle').addEventListener('change', (e) => {
       this.settings.debugMode = e.target.checked;
       this.updateDebugVisibility();
+      this.saveSettings();
     });
 
     document.getElementById('addDomain').addEventListener('click', () => {
@@ -69,9 +71,6 @@ class PopupManager {
       }
     });
 
-    document.getElementById('saveSettings').addEventListener('click', () => {
-      this.saveSettings();
-    });
 
     document.getElementById('viewTabsBtn').addEventListener('click', () => {
       this.openTabsPage();
@@ -88,6 +87,10 @@ class PopupManager {
     document.getElementById('openDebugDashboard').addEventListener('click', () => {
       chrome.tabs.create({ url: chrome.runtime.getURL('debug/debug-dashboard.html') });
     });
+
+    document.getElementById('tabLockToggle').addEventListener('click', () => {
+      this.toggleCurrentTabLock();
+    });
   }
 
   updateUI() {
@@ -95,23 +98,25 @@ class PopupManager {
     document.getElementById('timeValue').value = this.settings.timeValue;
     document.getElementById('timeUnit').value = this.settings.timeUnit;
     
-    // Set radio button for timer persistence mode
-    const persistenceMode = this.settings.timerPersistenceMode || 'absolute';
-    const radioButton = document.querySelector(`input[name="timerPersistence"][value="${persistenceMode}"]`);
-    if (radioButton) {
-      radioButton.checked = true;
-    }
     
     document.getElementById('debugToggle').checked = this.settings.debugMode || false;
+    this.updateStatusIndicator();
     this.updateSettingsVisibility();
     this.updateDebugVisibility();
     this.renderDomainList();
+    this.updateTabLockUI();
   }
 
   updateSettingsVisibility() {
-    const settingsSection = document.getElementById('settingsSection');
-    settingsSection.style.opacity = this.settings.enabled ? '1' : '0.5';
-    settingsSection.style.pointerEvents = this.settings.enabled ? 'auto' : 'none';
+    const mainControls = document.querySelector('.main-controls');
+    const timerSetting = document.querySelector('.timer-setting');
+    const opacity = this.settings.enabled ? '1' : '0.5';
+    const pointerEvents = this.settings.enabled ? 'auto' : 'none';
+    
+    if (timerSetting) {
+      timerSetting.style.opacity = opacity;
+      timerSetting.style.pointerEvents = pointerEvents;
+    }
   }
 
   renderDomainList() {
@@ -137,32 +142,51 @@ class PopupManager {
       this.settings.excludedDomains.push(domain);
       input.value = '';
       this.renderDomainList();
+      this.saveSettings();
     }
   }
 
   removeDomain(index) {
     this.settings.excludedDomains.splice(index, 1);
     this.renderDomainList();
+    this.saveSettings();
   }
 
   async saveSettings() {
     await chrome.storage.sync.set({ autoCloseSettings: this.settings });
-    
-    const button = document.getElementById('saveSettings');
-    const originalText = button.textContent;
-    button.textContent = 'Saved!';
-    button.style.background = '#4CAF50';
-    
-    setTimeout(() => {
-      button.textContent = originalText;
-      button.style.background = '';
-    }, 1000);
   }
 
   async updateTabsCount() {
     const { savedTabs = [] } = await chrome.storage.local.get(['savedTabs']);
     const count = savedTabs.length;
-    document.getElementById('tabsCount').textContent = `${count} tab${count !== 1 ? 's' : ''} saved`;
+    document.getElementById('tabsCount').textContent = `${count} tab${count !== 1 ? 's' : ''}`;
+  }
+
+  updateStatusIndicator() {
+    const indicator = document.getElementById('statusIndicator');
+    if (this.settings.enabled) {
+      indicator.textContent = 'ON';
+      indicator.classList.add('on');
+    } else {
+      indicator.textContent = 'OFF';
+      indicator.classList.remove('on');
+    }
+  }
+
+  toggleAdvancedSettings() {
+    const advancedSettings = document.getElementById('advancedSettings');
+    const advancedToggle = document.getElementById('advancedToggle');
+    const isVisible = advancedSettings.style.display !== 'none';
+
+    if (isVisible) {
+      advancedSettings.style.display = 'none';
+      advancedToggle.classList.remove('expanded');
+      advancedToggle.setAttribute('aria-expanded', 'false');
+    } else {
+      advancedSettings.style.display = 'block';
+      advancedToggle.classList.add('expanded');
+      advancedToggle.setAttribute('aria-expanded', 'true');
+    }
   }
 
   updateDebugVisibility() {
@@ -192,6 +216,72 @@ class PopupManager {
 
   openTabsPage() {
     chrome.tabs.create({ url: chrome.runtime.getURL('tabs/tabs.html') });
+  }
+
+  async updateTabLockUI() {
+    try {
+      // Get the currently active tab
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!activeTab) {
+        // Hide the button if no active tab
+        document.getElementById('tabLockToggle').style.display = 'none';
+        return;
+      }
+
+      // Show the button
+      document.getElementById('tabLockToggle').style.display = 'flex';
+
+      // Get lock status from background script
+      const response = await chrome.runtime.sendMessage({
+        type: 'getTabLockStatus',
+        tabId: activeTab.id
+      });
+
+      const button = document.getElementById('tabLockToggle');
+      const icon = document.getElementById('tabLockIcon');
+      const text = document.getElementById('tabLockText');
+
+      if (response && response.isLocked) {
+        button.classList.add('locked');
+        button.setAttribute('aria-pressed', 'true');
+        icon.textContent = '🔓';
+        text.textContent = 'Unlock Current Tab';
+      } else {
+        button.classList.remove('locked');
+        button.setAttribute('aria-pressed', 'false');
+        icon.textContent = '🔒';
+        text.textContent = 'Lock Current Tab';
+      }
+    } catch (error) {
+      console.error('Failed to update tab lock UI:', error);
+      // Hide button on error
+      document.getElementById('tabLockToggle').style.display = 'none';
+    }
+  }
+
+  async toggleCurrentTabLock() {
+    try {
+      // Get the currently active tab
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!activeTab) {
+        console.log('No active tab found');
+        return;
+      }
+
+      // Send toggle message to background script
+      const response = await chrome.runtime.sendMessage({
+        type: 'toggleTabLock',
+        tabId: activeTab.id
+      });
+
+      if (response && response.success) {
+        // Update UI to reflect new state
+        this.updateTabLockUI();
+        console.log(`Tab ${response.isLocked ? 'locked' : 'unlocked'} via popup button`);
+      }
+    } catch (error) {
+      console.error('Failed to toggle tab lock:', error);
+    }
   }
 }
 
