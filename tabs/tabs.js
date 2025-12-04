@@ -525,36 +525,50 @@ class TabsManager {
   }
 
   async restoreTabs(tabsToRestore, groupName) {
-    try {
-      // Get current saved tabs from storage
-      const { savedTabs = [] } = await chrome.storage.local.get(['savedTabs']);
-      this.debugLog('Current saved tabs count:', savedTabs.length);
-      
-      // Create all tabs first
-      const createdTabs = [];
-      for (const tab of tabsToRestore) {
+    // Track successfully restored tab IDs to only remove those from storage
+    const successfullyRestoredTabIds = [];
+    const failedTabs = [];
+
+    // Attempt to create each tab individually, tracking successes and failures
+    for (const tab of tabsToRestore) {
+      try {
         this.debugLog('Creating tab with URL:', tab.url);
         const newTab = await chrome.tabs.create({ url: tab.url });
-        createdTabs.push(newTab);
+        successfullyRestoredTabIds.push(String(tab.id));
         this.debugLog('Created tab:', newTab.id);
+      } catch (error) {
+        this.debugLog('Failed to create tab:', tab.url, error);
+        failedTabs.push(tab);
       }
-      
-      // Then remove all the restored tabs from storage in one operation
-      const tabIdsToRemove = tabsToRestore.map(tab => String(tab.id));
-      this.debugLog('Tab IDs to remove:', tabIdsToRemove);
-      
-      const remainingTabs = savedTabs.filter(t => !tabIdsToRemove.includes(String(t.id)));
-      this.debugLog('Remaining tabs after filter:', remainingTabs.length);
-      
-      await chrome.storage.local.set({ savedTabs: remainingTabs });
-      this.debugLog('Storage updated successfully');
-      
-      await this.loadTabs();
-      this.showNotification(`${tabsToRestore.length} tabs restored successfully from ${groupName}`, 'success');
-    } catch (error) {
-      console.error(`Failed to restore ${groupName}:`, error);
-      this.debugLog('Error details:', error);
-      this.showNotification(`Failed to restore some tabs from ${groupName}: ` + error.message, 'error');
+    }
+
+    // Only remove successfully restored tabs from storage
+    if (successfullyRestoredTabIds.length > 0) {
+      try {
+        const { savedTabs = [] } = await chrome.storage.local.get(['savedTabs']);
+        this.debugLog('Current saved tabs count:', savedTabs.length);
+        this.debugLog('Successfully restored tab IDs to remove:', successfullyRestoredTabIds);
+
+        const remainingTabs = savedTabs.filter(t => !successfullyRestoredTabIds.includes(String(t.id)));
+        this.debugLog('Remaining tabs after filter:', remainingTabs.length);
+
+        await chrome.storage.local.set({ savedTabs: remainingTabs });
+        this.debugLog('Storage updated successfully');
+      } catch (storageError) {
+        console.error('Failed to update storage after restore:', storageError);
+        this.showNotification('Tabs restored but failed to update storage', 'error');
+      }
+    }
+
+    await this.loadTabs();
+
+    // Show appropriate notification based on results
+    if (failedTabs.length === 0) {
+      this.showNotification(`${successfullyRestoredTabIds.length} tabs restored successfully from ${groupName}`, 'success');
+    } else if (successfullyRestoredTabIds.length > 0) {
+      this.showNotification(`Restored ${successfullyRestoredTabIds.length} tabs, ${failedTabs.length} failed from ${groupName}`, 'error');
+    } else {
+      this.showNotification(`Failed to restore any tabs from ${groupName}`, 'error');
     }
   }
 

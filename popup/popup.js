@@ -241,10 +241,12 @@ class PopupManager {
 
       if (response && response.isLocked) {
         button.classList.add('locked');
+        button.setAttribute('aria-pressed', 'true');
         icon.textContent = '🔓';
         text.textContent = 'Unlock Current Tab';
       } else {
         button.classList.remove('locked');
+        button.setAttribute('aria-pressed', 'false');
         icon.textContent = '🔒';
         text.textContent = 'Lock Current Tab';
       }

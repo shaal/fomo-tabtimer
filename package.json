@@ -14,7 +14,7 @@
     "setup": "npm install && npm run install-playwright"
   },
   "devDependencies": {
-    "playwright": "^1.47.0"
+    "@playwright/test": "^1.54.1"
   },
   "keywords": [
     "chrome-extension",
@@ -23,8 +23,5 @@
     "automation"
   ],
   "author": "Test Suite",
-  "license": "MIT",
-  "dependencies": {
-    "@playwright/test": "^1.54.1"
-  }
+  "license": "MIT"
 }
