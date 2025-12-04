@@ -7,8 +7,8 @@ test.describe('CLOSING State Bug Investigation', () => {
   let backgroundPage;
 
   test.beforeAll(async ({ browser }) => {
-    // Load the Chrome extension from current directory
-    const extensionPath = path.resolve(__dirname);
+    // Load the Chrome extension from parent directory (extension root)
+    const extensionPath = path.resolve(__dirname, '..');
     console.log(`Loading extension from: ${extensionPath}`);
     
     context = await browser.newContext({

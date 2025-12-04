@@ -433,21 +433,19 @@ test.describe('Context Menu Simulation Tests', () => {
     const simulatedMenuClick = await backgroundPage.evaluate(async () => {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       const tab = tabs[0];
-      
+
       const manager = window.autoCloseManagerInstance || getAutoCloseManager();
-      
-      // Simulate context menu click to lock tab
-      const lockInfo = { menuItemId: 'lockTab' };
+
+      // Simulate context menu click to lock tab (menuItemId: 'lockTab')
       await manager.lockTab(tab.id);
-      
+
       const isLocked = manager.lockedTabs.has(tab.id);
-      
-      // Simulate context menu click to unlock tab
-      const unlockInfo = { menuItemId: 'unlockTab' };
+
+      // Simulate context menu click to unlock tab (menuItemId: 'unlockTab')
       await manager.unlockTab(tab.id);
-      
+
       const isUnlocked = !manager.lockedTabs.has(tab.id);
-      
+
       return { isLocked, isUnlocked, tabId: tab.id };
     });
     

@@ -11,44 +11,47 @@ const fs = require('fs');
 
 function checkDependencies() {
   console.log('🔍 Checking dependencies...');
-  
+
+  const rootDir = path.resolve(__dirname, '..');
+
   // Check if package.json exists
-  if (!fs.existsSync('../package.json')) {
+  if (!fs.existsSync(path.join(rootDir, 'package.json'))) {
     console.error('❌ package.json not found. Please run this from the extension directory.');
     process.exit(1);
   }
-  
+
   // Check if node_modules exists
-  if (!fs.existsSync('../node_modules')) {
+  if (!fs.existsSync(path.join(rootDir, 'node_modules'))) {
     console.error('❌ node_modules not found. Please run "npm install" first.');
     process.exit(1);
   }
-  
+
   // Check if playwright is installed
-  if (!fs.existsSync('../node_modules/.bin/playwright')) {
+  if (!fs.existsSync(path.join(rootDir, 'node_modules', '.bin', 'playwright'))) {
     console.error('❌ Playwright not found. Please run "npm run setup" first.');
     process.exit(1);
   }
-  
+
   console.log('✅ Dependencies check passed');
 }
 
 function checkExtensionFiles() {
   console.log('🔍 Checking extension files...');
-  
+
+  const rootDir = path.resolve(__dirname, '..');
   const requiredFiles = [
-    '../manifest.json',
-    '../background.js',
-    './test-tab-locking.js'
+    path.join(rootDir, 'manifest.json'),
+    path.join(rootDir, 'background.js'),
+    path.join(__dirname, 'test-tab-locking.js')
   ];
-  
+
   for (const file of requiredFiles) {
     if (!fs.existsSync(file)) {
       console.error(`❌ Required file missing: ${file}`);
       process.exit(1);
     }
   }
-  
+
   console.log('✅ Extension files check passed');
 }
 

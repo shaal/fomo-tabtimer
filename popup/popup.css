@@ -91,6 +91,11 @@ h1 {
   background: #45a049;
 }
 
+.tab-lock-toggle:focus-visible {
+  outline: 2px solid #1976D2;
+  outline-offset: 2px;
+}
+
 .advanced-toggle-section {
   background: white;
   border-bottom: 1px solid #e9ecef;
@@ -112,6 +117,11 @@ h1 {
 
 .advanced-toggle:hover {
   background: #f8f9fa;
+}
+
+.advanced-toggle:focus-visible {
+  outline: 2px solid #1976D2;
+  outline-offset: -2px;
 }
 
 .advanced-toggle .arrow {

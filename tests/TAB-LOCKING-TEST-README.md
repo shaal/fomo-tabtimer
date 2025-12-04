@@ -171,14 +171,15 @@ DEBUG=pw:* npm run test-tab-locking-direct
 ## File Structure
 
 ```
-/Users/ofershaal/code/test/fomo-tabtimer/
-├── test-tab-locking.js          # Main test file
-├── run-tab-locking-test.js      # Test runner script  
-├── playwright.config.js         # Playwright configuration
-├── package.json                 # Updated with test scripts
-├── manifest.json               # Extension manifest (with contextMenus permission)
-├── background.js               # Extension background script
-└── TAB-LOCKING-TEST-README.md  # This file
+fomo-tabtimer/
+├── tests/
+│   ├── test-tab-locking.js          # Main test file
+│   ├── run-tab-locking-test.js      # Test runner script
+│   ├── playwright.config.js         # Playwright configuration
+│   └── TAB-LOCKING-TEST-README.md   # This file
+├── package.json                     # Updated with test scripts
+├── manifest.json                    # Extension manifest (with contextMenus permission)
+└── background.js                    # Extension background script
 ```
 
 ## Extension Integration

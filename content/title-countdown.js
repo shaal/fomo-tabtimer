@@ -7,7 +7,20 @@ class TitleCountdown {
     this.isActive = true;
     this.titleUpdateInterval = null;
     this.isLocked = false;
+    this.lastMouseMoveTime = 0;
     this.init();
+  }
+
+  // Throttle function to limit how often a callback can be called
+  throttle(callback, delay) {
+    let lastCall = 0;
+    return (...args) => {
+      const now = Date.now();
+      if (now - lastCall >= delay) {
+        lastCall = now;
+        callback.apply(this, args);
+      }
+    };
   }
 
   async init() {
@@ -94,16 +107,22 @@ class TitleCountdown {
 
   trackActivity() {
     this.isActive = !document.hidden;
-    
+
     const resetActivity = () => {
       this.lastActivity = Date.now();
       this.updateTabTitle();
     };
 
+    // Throttled version for high-frequency events like mousemove
+    const throttledResetActivity = this.throttle(resetActivity, 1000);
+
     // Note: 'focus' is handled separately on window to avoid duplicate handling
-    ['click', 'keydown', 'mousemove', 'scroll'].forEach(event => {
+    ['click', 'keydown', 'scroll'].forEach(event => {
       document.addEventListener(event, resetActivity, { passive: true });
     });
+
+    // Use throttled handler for mousemove to prevent performance issues
+    document.addEventListener('mousemove', throttledResetActivity, { passive: true });
 
     document.addEventListener('visibilitychange', () => {
       this.isActive = !document.hidden;

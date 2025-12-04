@@ -4,6 +4,7 @@ class AutoCloseManager {
     this.lockedTabs = new Set(); // Track locked tabs
     this.pausedTime = null; // Track when auto-close was paused
     this.shortTimeoutInterval = null;
+    this.contextMenuListenerRegistered = false; // Guard for listener accumulation
     this.memoryUsage = {
       lastCheck: Date.now(),
       peakUsage: 0,
@@ -271,7 +272,7 @@ class AutoCloseManager {
 
   setupContextMenu() {
     this.debugLog('Setting up context menu...');
-    
+
     // Remove existing context menu items first
     chrome.contextMenus.removeAll(() => {
       // Create context menu for locking tabs
@@ -293,31 +294,40 @@ class AutoCloseManager {
       this.debugLog('Context menu items created');
     });
 
-    // Handle context menu clicks
-    chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-      if (!tab) return;
+    // Guard against registering multiple listeners
+    if (!this.contextMenuListenerRegistered) {
+      this.contextMenuListenerRegistered = true;
 
-      try {
-        if (info.menuItemId === 'lockTab') {
-          await this.lockTab(tab.id);
-        } else if (info.menuItemId === 'unlockTab') {
-          await this.unlockTab(tab.id);
+      // Handle context menu clicks
+      chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+        if (!tab) return;
+
+        try {
+          if (info.menuItemId === 'lockTab') {
+            await this.lockTab(tab.id);
+          } else if (info.menuItemId === 'unlockTab') {
+            await this.unlockTab(tab.id);
+          }
+        } catch (error) {
+          console.error('❌ Error handling context menu click:', error);
         }
-      } catch (error) {
-        console.error('❌ Error handling context menu click:', error);
-      }
-    });
+      });
+    }
   }
 
   async updateContextMenuVisibility(tabId) {
     const isLocked = this.lockedTabs.has(tabId);
-    
-    chrome.contextMenus.update('lockTab', { 
-      visible: !isLocked 
+
+    chrome.contextMenus.update('lockTab', { visible: !isLocked }, () => {
+      if (chrome.runtime.lastError) {
+        this.debugLog('Error updating lockTab menu:', chrome.runtime.lastError.message);
+      }
     });
-    
-    chrome.contextMenus.update('unlockTab', { 
-      visible: isLocked 
+
+    chrome.contextMenus.update('unlockTab', { visible: isLocked }, () => {
+      if (chrome.runtime.lastError) {
+        this.debugLog('Error updating unlockTab menu:', chrome.runtime.lastError.message);
+      }
     });
   }
 

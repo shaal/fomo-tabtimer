@@ -3,7 +3,7 @@ const path = require('path');
 
 test.describe('CLOSING State Bug - Simple Investigation', () => {
   test('should investigate the CLOSING state bug with manual verification', async ({ browser }) => {
-    const extensionPath = path.resolve(__dirname);
+    const extensionPath = path.resolve(__dirname, '..');
     console.log(`Loading extension from: ${extensionPath}`);
     
     // Create browser context with extension
@@ -209,7 +209,7 @@ test.describe('CLOSING State Bug - Simple Investigation', () => {
   });
   
   test('should test the chrome.tabs.remove API directly', async ({ browser }) => {
-    const extensionPath = path.resolve(__dirname);
+    const extensionPath = path.resolve(__dirname, '..');
     console.log('Testing chrome.tabs.remove API...');
     
     const context = await browser.newContext({
